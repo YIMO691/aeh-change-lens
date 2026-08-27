@@ -5,6 +5,8 @@ dist/
 build/
 *.egg-info/
 node_modules/
+**/bin/
+**/obj/
 .pytest_cache/
 .coverage
 coverage.xml

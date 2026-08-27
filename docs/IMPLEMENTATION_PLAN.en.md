@@ -1,7 +1,7 @@
 # AEH Change Lens Implementation Plan
 
 > Language: English translation; the Chinese plan is authoritative.
-> Status: `PLAN_READY / IMPLEMENTATION_AUTHORIZATION_GRANTED / CL-GATE-01_PASSED / CL-WP-02_READY`
+> Status: `PLAN_READY / IMPLEMENTATION_AUTHORIZATION_GRANTED / CL-GATE-01_PASSED / CL-WP-02_IN_PROGRESS`
 > Canonical Chinese plan: [IMPLEMENTATION_PLAN.zh-CN.md](IMPLEMENTATION_PLAN.zh-CN.md)
 > Machine contract: [proposal.yaml](../governance/proposal.yaml)
 
@@ -96,7 +96,7 @@ PLAN_READY
 IMPLEMENTATION_AUTHORIZATION_GRANTED
 CL-GATE-00_PASSED
 CL-GATE-01_PASSED
-CL-WP-02_READY
+CL-WP-02_IN_PROGRESS
 RELEASE_NOT_ASSESSED
 ```
 

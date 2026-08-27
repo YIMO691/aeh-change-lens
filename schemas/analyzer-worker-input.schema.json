@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeh-change-lens.dev/schemas/analyzer-worker-input.schema.json",
+  "title": "Local Roslyn worker input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "revision", "unity_context", "source_files"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "revision": { "enum": ["OLD", "NEW"] },
+    "unity_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completeness", "unity_version", "defines", "references"],
+      "properties": {
+        "completeness": { "enum": ["COMPLETE", "PARTIAL", "MISSING"] },
+        "unity_version": { "type": ["string", "null"] },
+        "defines": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "references": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "source_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "content", "content_hash"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+          },
+          "content": { "type": "string" },
+          "content_hash": { "$ref": "common.schema.json#/$defs/sha256" }
+        }
+      }
+    }
+  }
+}
+

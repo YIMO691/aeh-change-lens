@@ -7,7 +7,7 @@ allowlist decision, not an instruction to install every candidate.
 |---|---|---|---|
 | Python 3.11+ | CLI and orchestration runtime | PSF-2.0 | Allow |
 | .NET 8+ | Analyzer worker runtime | MIT | Allow |
-| Microsoft.CodeAnalysis (Roslyn) | Authoritative C# semantic analysis | MIT | Allow |
+| Microsoft.CodeAnalysis.CSharp 5.9.0 (Roslyn) | C# syntax and semantic analysis | MIT | Added in CL-WP-02 with package lock |
 | jsonschema | Contract validation in Python | MIT | Allow |
 | PyYAML | Governance and fixture contract loading | MIT | Allow |
 | Tree-sitter / tree-sitter-c-sharp | Explicit syntax-only fallback | MIT | Allow only behind a partial-mode adapter |
@@ -34,4 +34,3 @@ Primary references: the official repositories or runtime distributions for
 [Tree-sitter](https://github.com/tree-sitter/tree-sitter),
 [React](https://github.com/facebook/react), and
 [React Flow](https://github.com/xyflow/xyflow).
-
