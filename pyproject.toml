@@ -12,6 +12,9 @@ license = { text = "MIT" }
 authors = [{ name = "AEH Change Lens contributors" }]
 dependencies = []
 
+[project.scripts]
+change-lens = "aeh_change_lens.cli:main"
+
 [project.optional-dependencies]
 contract = [
   "jsonschema>=4.23,<5",
@@ -20,4 +23,3 @@ contract = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/aeh_change_lens"]
-

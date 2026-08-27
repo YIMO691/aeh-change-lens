@@ -1,7 +1,7 @@
 # AEH Change Lens Implementation Plan
 
 > Language: English translation; the Chinese plan is authoritative.
-> Status: `PLAN_READY / IMPLEMENTATION_AUTHORIZATION_GRANTED / CL-GATE-00_PASSED / CL-WP-01_READY`
+> Status: `PLAN_READY / IMPLEMENTATION_AUTHORIZATION_GRANTED / CL-GATE-01_PASSED / CL-WP-02_READY`
 > Canonical Chinese plan: [IMPLEMENTATION_PLAN.zh-CN.md](IMPLEMENTATION_PLAN.zh-CN.md)
 > Machine contract: [proposal.yaml](../governance/proposal.yaml)
 
@@ -95,10 +95,12 @@ An Owner decision is required before changing the target user, scope, mutation a
 PLAN_READY
 IMPLEMENTATION_AUTHORIZATION_GRANTED
 CL-GATE-00_PASSED
-CL-WP-01_READY
+CL-GATE-01_PASSED
+CL-WP-02_READY
 RELEASE_NOT_ASSESSED
 ```
 
 The Owner explicitly authorized entry into `CL-WP-00` with the instruction “开始实施” on 2026-08-27. This authorization does not automatically permit target-project execution, analyzed-source upload, unsandboxed tests, or AEH repository mutation.
 
 Raw `CL-GATE-00` verification evidence is recorded in [CL-GATE-00.md](../governance/gates/CL-GATE-00.md).
+Raw `CL-GATE-01` verification evidence is recorded in [CL-GATE-01.md](../governance/gates/CL-GATE-01.md).

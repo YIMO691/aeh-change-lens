@@ -1,7 +1,7 @@
 # AEH Change Lens
 
-> 状态：已授权实施；`CL-GATE-00` 已通过，`CL-WP-01` 可以开始。
-> Status: implementation authorized; `CL-GATE-00` passed and `CL-WP-01` is ready.
+> 状态：已授权实施；`CL-GATE-00`、`CL-GATE-01` 已通过，`CL-WP-02` 可以开始。
+> Status: implementation authorized; `CL-GATE-00` and `CL-GATE-01` passed; `CL-WP-02` is ready.
 
 ## 中文
 
@@ -32,13 +32,22 @@ AEH Change Lens 是一个只读的代码变更解释工具。它把一次 AI 辅
 - [English implementation plan](docs/IMPLEMENTATION_PLAN.en.md)
 - [机器可读治理契约](governance/proposal.yaml)
 
+当前已实现的开发者入口：
+
+```powershell
+change-lens snapshot <repository-root> --base <commit> --target WORKTREE --pretty
+```
+
+该命令只读取 Git 对象和工作树中的受支持源码，输出原/新版本的相对路径、对象 ID、逐文件 SHA-256、清单摘要和 rename 映射；不 checkout、不编译或执行目标项目代码。当前尚未实现 Roslyn 语义链路和 Viewer。
+
 当前 Gate：
 
 ```text
 PLAN_READY
 IMPLEMENTATION_AUTHORIZATION_GRANTED
 CL-GATE-00_PASSED
-CL-WP-01_READY
+CL-GATE-01_PASSED
+CL-WP-02_READY
 RELEASE_NOT_ASSESSED
 ```
 

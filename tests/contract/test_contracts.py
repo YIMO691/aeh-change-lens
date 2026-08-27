@@ -121,12 +121,16 @@ class JsonSchemaContractTests(unittest.TestCase):
 
 
 class GovernanceContractTests(unittest.TestCase):
-    def test_owner_authorized_only_wp00(self) -> None:
+    def test_active_work_package_respects_gate_order(self) -> None:
         governance = load_yaml("governance/proposal.yaml")
         status = governance["status"]
         self.assertEqual("GRANTED", status["implementation_authorization"])
-        self.assertEqual("CL-WP-00", status["active_work_package"])
-        self.assertEqual("CL-GATE-00", status["active_gate"])
+        packages = {item["id"]: item for item in governance["work_packages"]}
+        active = status["active_work_package"]
+        self.assertIn(active, packages)
+        self.assertEqual(packages[active]["exit_gate"], status["active_gate"])
+        for dependency in packages[active]["depends_on"]:
+            self.assertEqual("GATE_PASSED", packages[dependency].get("status"))
         self.assertEqual("owner_chat_instruction", governance["implementation_authorization_evidence"]["source"])
 
     def test_every_p0_has_one_falsifiable_oracle(self) -> None:

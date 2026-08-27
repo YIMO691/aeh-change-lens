@@ -5,10 +5,10 @@ status:
   plan_verdict: PLAN_READY
   implementation_authorization: GRANTED
   implementation_authorized_on: 2026-08-27
-  active_work_package: CL-WP-00
-  active_gate: CL-GATE-00
+  active_work_package: CL-WP-01
+  active_gate: CL-GATE-01
   active_gate_status: PASSED
-  next_work_package: CL-WP-01
+  next_work_package: CL-WP-02
   release_decision: NOT_ASSESSED
 
 owner_decisions:
@@ -94,10 +94,11 @@ work_packages:
   - id: CL-WP-01
     depends_on: [CL-WP-00]
     exit_gate: CL-GATE-01
-    status: READY
+    status: GATE_PASSED
   - id: CL-WP-02
     depends_on: [CL-WP-01]
     exit_gate: CL-GATE-02
+    status: READY
   - id: CL-WP-03
     depends_on: [CL-WP-02]
     exit_gate: CL-GATE-03

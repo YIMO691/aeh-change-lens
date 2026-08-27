@@ -1,7 +1,7 @@
 # AEH Change Lens 实施方案
 
 > 文档语言：中文（权威版本）
-> 状态：`PLAN_READY / IMPLEMENTATION_AUTHORIZATION_GRANTED / CL-GATE-00_PASSED / CL-WP-01_READY`
+> 状态：`PLAN_READY / IMPLEMENTATION_AUTHORIZATION_GRANTED / CL-GATE-01_PASSED / CL-WP-02_READY`
 > 对应英文版：[IMPLEMENTATION_PLAN.en.md](IMPLEMENTATION_PLAN.en.md)
 > 机器契约：[proposal.yaml](../governance/proposal.yaml)
 
@@ -287,10 +287,12 @@ Bundle 必须记录：
 PLAN_READY
 IMPLEMENTATION_AUTHORIZATION_GRANTED
 CL-GATE-00_PASSED
-CL-WP-01_READY
+CL-GATE-01_PASSED
+CL-WP-02_READY
 RELEASE_NOT_ASSESSED
 ```
 
 Owner 已于 2026-08-27 通过“开始实施”明确授权进入 `CL-WP-00`。实现授权不自动允许执行目标项目代码、上传待分析源码、运行非隔离测试或修改 AEH 仓库。
 
 `CL-GATE-00` 的原始验证证据见 [CL-GATE-00.md](../governance/gates/CL-GATE-00.md)。
+`CL-GATE-01` 的原始验证证据见 [CL-GATE-01.md](../governance/gates/CL-GATE-01.md)。
