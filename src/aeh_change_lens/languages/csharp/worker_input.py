@@ -70,6 +70,7 @@ class WorkerInputAssembler:
         self._assert_snapshot_current(binding)
         self._assert_context_current(context)
         self._assert_asmdef_bound(binding, context)
+        self._assert_package_manifest_bound(binding, context)
 
         source_inputs: list[WorkerSourceInput] = []
         for unity_path in context.source_files:
@@ -143,6 +144,19 @@ class WorkerInputAssembler:
         current = UnityContextBuilder(self.unity_root).build(context.assembly.name)
         if current.context_digest != context.context_digest:
             raise SnapshotStaleError("Unity compilation context changed after it was bound")
+
+    def _assert_package_manifest_bound(
+        self,
+        binding: SnapshotBinding,
+        context: UnityCompilationContext,
+    ) -> None:
+        if context.package_manifest is None:
+            return
+        repo_path = self._repo_path(normalize_repo_relative(context.package_manifest.path))
+        file_binding = self._bound_file(binding, repo_path)
+        if file_binding.sha256 != context.package_manifest.sha256:
+            raise SnapshotStaleError("Unity package manifest does not match the source snapshot")
+        self.resolver.read_bound_bytes(binding, repo_path)
 
     def _assert_snapshot_current(self, binding: SnapshotBinding) -> None:
         if not self.resolver.is_current(binding):

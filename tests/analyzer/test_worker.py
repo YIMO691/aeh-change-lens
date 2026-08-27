@@ -102,6 +102,7 @@ class RoslynWorkerTests(unittest.TestCase):
             "SERIALIZED_REFERENCE", "DYNAMIC_DISPATCH_UNKNOWN",
             "STARTS_COROUTINE", "YIELDS_TO", "AWAITS", "SUBSCRIBES_EVENT",
             "PUBLISHES_EVENT", "COMPONENT_LOOKUP",
+            "READS_STATE",
         }.issubset(relations))
 
         lifecycle_edges = [edge for edge in edges if edge["relation"] == "FRAMEWORK_LIFECYCLE"]
@@ -127,9 +128,7 @@ class RoslynWorkerTests(unittest.TestCase):
         ))
         self.assertTrue(all(
             edge["provenance"]["confidence"] == "CONFIRMED_STATIC"
-            for edge in edges if edge["relation"] in {
-                "AWAITS", "SUBSCRIBES_EVENT", "PUBLISHES_EVENT",
-            }
+            for edge in edges if edge["relation"] == "AWAITS"
         ))
         self.assertTrue(all(
             edge["provenance"]["confidence"] == "STRUCTURAL"
@@ -156,6 +155,28 @@ class RoslynWorkerTests(unittest.TestCase):
         self.assertTrue(all(
             "+=" in nodes[edge["target_node_id"]]["label"] for edge in subscription_edges
         ))
+        self.assertEqual(
+            {"CONFIRMED_STATIC", "STRUCTURAL", "UNKNOWN"},
+            {edge["provenance"]["confidence"] for edge in subscription_edges},
+        )
+        publication_edges = [edge for edge in edges if edge["relation"] == "PUBLISHES_EVENT"]
+        self.assertEqual(
+            {"CONFIRMED_STATIC", "STRUCTURAL"},
+            {edge["provenance"]["confidence"] for edge in publication_edges},
+        )
+        read_labels = {
+            nodes[edge["target_node_id"]]["label"]
+            for edge in edges if edge["relation"] == "READS_STATE"
+        }
+        self.assertTrue(any("IsLocked" in label for label in read_labels))
+        self.assertTrue(any("Balance" in label for label in read_labels))
+        self.assertTrue(any("frameCount" in label for label in read_labels))
+        self.assertFalse(any(label.endswith("amount") for label in read_labels))
+        write_labels = {
+            nodes[edge["target_node_id"]]["label"]
+            for edge in edges if edge["relation"] == "WRITES_STATE"
+        }
+        self.assertTrue(any("frameCount" in label for label in write_labels))
 
     def test_content_digest_mismatch_fails_closed(self) -> None:
         payload = worker_input()

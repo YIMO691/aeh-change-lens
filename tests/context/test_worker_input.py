@@ -40,6 +40,10 @@ class WorkerInputAssemblerTests(unittest.TestCase):
         (self.root / "Assets/Game").mkdir(parents=True)
         (self.root / "ProjectSettings").mkdir()
         (self.root / "Managed").mkdir()
+        (self.root / "Packages").mkdir()
+        (self.root / "Packages/packages-lock.json").write_text(
+            '{"dependencies":{}}\n', encoding="utf-8"
+        )
         (self.root / "Assets/Game/Game.asmdef").write_text(
             '{"name":"Game"}\n', encoding="utf-8"
         )
@@ -116,6 +120,18 @@ class WorkerInputAssemblerTests(unittest.TestCase):
         context = UnityContextBuilder(self.root).build("Game")
         with self.assertRaisesRegex(ValueError, "assembly is excluded"):
             WorkerInputAssembler(self.resolver, self.root).assemble(binding, context, "EXCLUDED")
+
+    def test_package_lock_mutation_after_binding_fails_closed(self) -> None:
+        binding = self.resolver.resolve_worktree("NEW")
+        context = UnityContextBuilder(self.root).build("Game")
+        (self.root / "Packages/packages-lock.json").write_text(
+            '{"dependencies":{"com.example":{"version":"1.0.0","source":"registry"}}}\n',
+            encoding="utf-8",
+        )
+        with self.assertRaises(SnapshotStaleError):
+            WorkerInputAssembler(self.resolver, self.root).assemble(
+                binding, context, "STALE-PACKAGES"
+            )
 
     def test_gb18030_source_preserves_raw_snapshot_digest(self) -> None:
         legacy = "class Entry { string Text = \"中文\"; }\n"

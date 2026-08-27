@@ -20,8 +20,13 @@
 - separate raw-snapshot and UTF-8 transport digests for legacy source encoding;
 - strict UTF-8, UTF BOM and GB18030 source decoding;
 - asmdef include/exclude platform and Define Constraints evaluation;
+- asmdef Version Defines evaluation from snapshot-bound Unity and package-lock versions,
+  with invalid/unparseable expressions explicitly downgraded;
 - fail-closed rejection before Worker input when the assembly is excluded;
 - coroutine start/yield, async await, C# event/delegate subscription and publication;
+- field/property state reads plus assignment and increment/decrement state writes;
+- conservative complex-delegate confidence: direct method group `CONFIRMED_STATIC`,
+  lambda `STRUCTURAL`, handler factory `UNKNOWN`;
 - common generic and `typeof` Unity component lookups;
 - confidence upgrade only when a bound `UnityEngine.CoreModule.dll` resolves
   `MonoBehaviour` and `UnityEventBase`;
@@ -34,18 +39,21 @@ defines=140
 metadata_references=221
 unity_references=69
 project_references=5
+locked_packages=48
+version_defines=0
 source_files=632
 assembly_graph_nodes=6
 assembly_graph_edges=12
-selected_snapshot_files=9325
+selected_snapshot_files=9328
 assembled_source_files=632
 source_encodings=UTF-8:336,UTF-8-BOM:273,GB18030:23
 completeness=PARTIAL
 assembly_applicability=APPLICABLE
 active_platform=Editor
 applicable_graph_assemblies=6/6
-context_digest=e3a34a0877dbf3f6c1ceb259a169bac9af39efac6d4c405f21f0e3e3c91aaae6
-assembly_graph_digest=32948fc0585e5336c3386aaab4ddec6a063b1255c58185c934d99b04e14d9d2e
+context_digest=b7967dc161ca186b396180f992bf44a6ddfd97a68b8748c2193afd52bf73bc4c
+assembly_graph_digest=45643bef7e5b8838a74019470e9d4f168d7d7e6628e9d366785cb29dfd228bd5
+snapshot_manifest=10a1311f07c1f30dbfae9ad084d72e1526c684fbbffc5f318cb57b47fc70f501
 ```
 
 The graph recursively follows the five root `ProjectReference` entries. Four
@@ -54,10 +62,14 @@ corresponding `Library/ScriptAssemblies` outputs exist, but are explicitly
 compiler options and output provenance can be bound. The root context and graph
 therefore correctly remain `PARTIAL`.
 
-All 632 `Unity.Model` sources were read through the worktree `SnapshotBinding`.
+All 632 `Unity.Model` sources and the package lock were read through the
+worktree `SnapshotBinding`.
 Twenty-three legacy GB18030 files were decoded without losing their raw-byte
 snapshot digests; the Worker receives a separate digest for transcoded UTF-8
 text. Snapshot and Unity context are checked both before and after assembly.
+The six graph assemblies contain no Version Define entries, so the pilot does
+not invent any; registry/prerelease, Unity-version, boundary, invalid-expression,
+missing-version and unparseable-Git cases are covered by deterministic fixtures.
 
 A synthetic `PilotBehaviour` compiled only in memory against the digest-bound
 Unity 2020.3 metadata. Its lifecycle, UnityEvent, coroutine-start and component-
@@ -68,15 +80,16 @@ executing project code:
 
 ```text
 status=PARTIAL
-nodes=12377
-edges=8869
+nodes=22382
+edges=18874
 diagnostics=51
 AWAITS=12
 BRANCHES_TO=3056
 DIRECT_CALL=1268
+READS_STATE=9994
 RETURNS_FROM=2371
 THROWS_FROM=1922
-WRITES_STATE=240
+WRITES_STATE=251
 ```
 
 The 50 compiler diagnostics are retained as warnings rather than hidden. They
@@ -96,7 +109,7 @@ Latest result:
 
 ```text
 Build succeeded: 0 warnings, 0 errors
-Ran 45 tests in 97.846s
+Ran 50 tests in 110.994s
 OK (skipped=1)
 ```
 
@@ -119,7 +132,7 @@ compiled, executed, staged, or cleaned.
 ## Remaining before CL-GATE-02
 
 - bind verifiable build provenance for generated ScriptAssemblies outputs;
-- evaluate Version Defines and additional platform aliases;
-- add state reads, event removal, complex delegate and Inspector bindings;
+- cover additional platform aliases and non-registry package-version forms;
+- add alias-aware state flow, event removal and Inspector bindings;
 - produce and measure OLD/NEW golden graphs against manual annotation;
 - run performance and adversarial matrices.

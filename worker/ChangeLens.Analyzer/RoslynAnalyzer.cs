@@ -203,6 +203,7 @@ internal static class RoslynAnalyzer
                     AddInvocations(method, model, methodNode);
                     AddAsyncAndCoroutineFlow(method, model, methodNode);
                     AddEventRelations(method, model, methodNode);
+                    AddStateReads(method, model, methodNode);
                     AddStateWrites(method, model, methodNode);
                 }
                 AddSerializedReferences(root, model);
@@ -363,14 +364,24 @@ internal static class RoslynAnalyzer
                          .Where(item => item.IsKind(SyntaxKind.AddAssignmentExpression)))
             {
                 var eventSymbol = model.GetSymbolInfo(assignment.Left).Symbol;
-                var handler = model.GetSymbolInfo(assignment.Right).Symbol as IMethodSymbol;
-                if (!IsEventOrDelegate(eventSymbol) || handler is null)
+                if (!IsEventOrDelegate(eventSymbol))
                     continue;
+                var isAnonymousHandler = assignment.Right is AnonymousFunctionExpressionSyntax;
+                var isDirectMethodGroup = assignment.Right is IdentifierNameSyntax or MemberAccessExpressionSyntax;
+                var handler = isDirectMethodGroup
+                    ? model.GetSymbolInfo(assignment.Right).Symbol as IMethodSymbol
+                    : null;
+                var confidence = isAnonymousHandler
+                    ? "STRUCTURAL"
+                    : handler is not null ? "CONFIRMED_STATIC" : "UNKNOWN";
                 var target = AddSyntheticNode(
-                    $"csharp:{_input.Revision}:subscription:{SymbolName(eventSymbol!)}:{SymbolName(handler)}",
-                    "EVENT", $"{SymbolName(eventSymbol!)} += {SymbolName(handler)}", assignment,
-                    "roslyn_semantic_model", "CONFIRMED_STATIC");
-                AddEdge(methodNode, target, "SUBSCRIBES_EVENT", "roslyn_semantic_model", "CONFIRMED_STATIC");
+                    handler is null
+                        ? Id("subscription", assignment)
+                        : $"csharp:{_input.Revision}:subscription:{SymbolName(eventSymbol!)}:{SymbolName(handler)}",
+                    "EVENT",
+                    $"{SymbolName(eventSymbol!)} += {(handler is null ? assignment.Right.ToString() : SymbolName(handler))}",
+                    assignment, "roslyn_semantic_model", confidence);
+                AddEdge(methodNode, target, "SUBSCRIBES_EVENT", "roslyn_semantic_model", confidence);
             }
 
             foreach (var invocation in method.DescendantNodes().OfType<InvocationExpressionSyntax>())
@@ -386,14 +397,53 @@ internal static class RoslynAnalyzer
                     continue;
                 var published = model.GetSymbolInfo(receiver).Symbol;
                 var receiverType = model.GetTypeInfo(receiver).Type;
-                if (!IsEventOrDelegate(published) ||
-                    (receiverType is not null && DerivesFrom(receiverType, "UnityEngine.Events.UnityEventBase")))
+                if (receiverType is not null && DerivesFrom(receiverType, "UnityEngine.Events.UnityEventBase"))
+                    continue;
+                var confidence = IsEventOrDelegate(published)
+                    ? "CONFIRMED_STATIC"
+                    : receiverType?.TypeKind == TypeKind.Delegate ? "STRUCTURAL" : null;
+                if (confidence is null)
                     continue;
                 var target = AddSyntheticNode(
-                    $"csharp:{_input.Revision}:event:{SymbolName(published!)}",
-                    "EVENT", SymbolName(published!), invocation,
-                    "roslyn_semantic_model", "CONFIRMED_STATIC");
-                AddEdge(methodNode, target, "PUBLISHES_EVENT", "roslyn_semantic_model", "CONFIRMED_STATIC");
+                    published is null
+                        ? Id("event", invocation)
+                        : $"csharp:{_input.Revision}:event:{SymbolName(published)}",
+                    "EVENT", published is null ? receiver.ToString() : SymbolName(published), invocation,
+                    "roslyn_semantic_model", confidence);
+                AddEdge(methodNode, target, "PUBLISHES_EVENT", "roslyn_semantic_model", confidence);
+            }
+        }
+
+        private void AddStateReads(
+            MethodDeclarationSyntax method,
+            SemanticModel model,
+            GraphNode methodNode)
+        {
+            var expressions = method.DescendantNodes().OfType<ExpressionSyntax>()
+                .Where(item => item is IdentifierNameSyntax or MemberAccessExpressionSyntax);
+            foreach (var expression in expressions)
+            {
+                if (expression is IdentifierNameSyntax identifier &&
+                    identifier.Parent is MemberAccessExpressionSyntax access && access.Name == identifier)
+                    continue;
+                if (expression.AncestorsAndSelf().OfType<InvocationExpressionSyntax>().Any(invocation =>
+                        invocation.Expression is IdentifierNameSyntax name && name.Identifier.ValueText == "nameof"))
+                    continue;
+                var assignment = expression.FirstAncestorOrSelf<AssignmentExpressionSyntax>();
+                if (assignment is not null && assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                    assignment.Left.Span.Contains(expression.Span))
+                    continue;
+                var argument = expression.FirstAncestorOrSelf<ArgumentSyntax>();
+                if (argument?.RefOrOutKeyword.IsKind(SyntaxKind.OutKeyword) == true)
+                    continue;
+                var symbol = model.GetSymbolInfo(expression).Symbol;
+                if (symbol is IFieldSymbol { IsConst: false } or IPropertySymbol)
+                {
+                    var state = AddSyntheticNode(
+                        Id("read-state", expression), "STATE", SymbolName(symbol), expression,
+                        "roslyn_semantic_model", "CONFIRMED_STATIC");
+                    AddEdge(methodNode, state, "READS_STATE", "roslyn_semantic_model", "CONFIRMED_STATIC");
+                }
             }
         }
 
@@ -438,6 +488,26 @@ internal static class RoslynAnalyzer
                 if (symbol is not (IFieldSymbol or IPropertySymbol))
                     continue;
                 var state = AddSyntheticNode(Id("state", assignment), "STATE", SymbolName(symbol), assignment.Left, "roslyn_semantic_model", "CONFIRMED_STATIC");
+                AddEdge(methodNode, state, "WRITES_STATE", "roslyn_semantic_model", "CONFIRMED_STATIC");
+            }
+            foreach (var unary in method.DescendantNodes().OfType<ExpressionSyntax>().Where(item =>
+                         item.IsKind(SyntaxKind.PreIncrementExpression) ||
+                         item.IsKind(SyntaxKind.PreDecrementExpression) ||
+                         item.IsKind(SyntaxKind.PostIncrementExpression) ||
+                         item.IsKind(SyntaxKind.PostDecrementExpression)))
+            {
+                var operand = unary switch
+                {
+                    PrefixUnaryExpressionSyntax prefix => prefix.Operand,
+                    PostfixUnaryExpressionSyntax postfix => postfix.Operand,
+                    _ => null,
+                };
+                var symbol = operand is null ? null : model.GetSymbolInfo(operand).Symbol;
+                if (symbol is not (IFieldSymbol or IPropertySymbol))
+                    continue;
+                var state = AddSyntheticNode(
+                    Id("state", unary), "STATE", SymbolName(symbol), unary,
+                    "roslyn_semantic_model", "CONFIRMED_STATIC");
                 AddEdge(methodNode, state, "WRITES_STATE", "roslyn_semantic_model", "CONFIRMED_STATIC");
             }
         }

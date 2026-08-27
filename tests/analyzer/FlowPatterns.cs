@@ -11,17 +11,22 @@ namespace ChangeLens.Fixture
     {
         private event Action Tick;
         private Action callback;
+        private int frameCount;
 
         private void OnEnable()
         {
             Tick += HandleTick;
+            Tick += () => HandleTick();
             callback += HandleTick;
+            callback += GetCallback();
         }
 
         private void Update()
         {
             Tick?.Invoke();
             callback?.Invoke();
+            GetCallback()?.Invoke();
+            frameCount++;
             StartCoroutine(Run());
             StartCoroutine("LegacyFlow");
             GetComponent<OtherComponent>();
@@ -43,5 +48,7 @@ namespace ChangeLens.Fixture
         }
 
         private void HandleTick() { }
+
+        private Action GetCallback() => callback;
     }
 }

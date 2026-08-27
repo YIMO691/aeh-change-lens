@@ -13,7 +13,16 @@ from .security import assert_safe_repository_root, normalize_repo_relative, secu
 
 
 DEFAULT_SOURCE_SUFFIXES = (".cs", ".asmdef")
-DEFAULT_EXACT_PATHS = ("ProjectSettings/ProjectVersion.txt",)
+DEFAULT_EXACT_PATHS = (
+    "ProjectSettings/ProjectVersion.txt",
+    "Packages/manifest.json",
+    "Packages/packages-lock.json",
+)
+DEFAULT_EXACT_SUFFIXES = (
+    "/ProjectSettings/ProjectVersion.txt",
+    "/Packages/manifest.json",
+    "/Packages/packages-lock.json",
+)
 
 
 def _sha256(value: bytes) -> str:
@@ -71,7 +80,11 @@ class SnapshotResolver:
 
     @staticmethod
     def _selected(path: str) -> bool:
-        return path in DEFAULT_EXACT_PATHS or path.lower().endswith(DEFAULT_SOURCE_SUFFIXES)
+        return (
+            path in DEFAULT_EXACT_PATHS
+            or path.endswith(DEFAULT_EXACT_SUFFIXES)
+            or path.lower().endswith(DEFAULT_SOURCE_SUFFIXES)
+        )
 
     def _commit_oid(self, revision: str) -> str:
         if not revision or "\x00" in revision:

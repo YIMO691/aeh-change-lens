@@ -23,6 +23,13 @@ class MetadataReferenceBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class VersionDefineBinding:
+    resource: str
+    expression: str
+    define: str
+
+
+@dataclass(frozen=True, slots=True)
 class AssemblyDefinitionBinding:
     name: str
     path: str
@@ -32,6 +39,7 @@ class AssemblyDefinitionBinding:
     include_platforms: tuple[str, ...]
     exclude_platforms: tuple[str, ...]
     define_constraints: tuple[str, ...]
+    version_defines: tuple[VersionDefineBinding, ...]
     no_engine_references: bool
 
 
@@ -44,11 +52,35 @@ class DefineConstraintEvaluation:
 
 
 @dataclass(frozen=True, slots=True)
+class VersionDefineEvaluation:
+    resource: str
+    expression: str
+    define: str
+    resource_version: str | None
+    status: str
+
+
+@dataclass(frozen=True, slots=True)
 class AssemblyApplicabilityBinding:
     status: str
     active_platforms: tuple[str, ...]
     platform_status: str
     define_constraints: tuple[DefineConstraintEvaluation, ...]
+    version_defines: tuple[VersionDefineEvaluation, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PackageVersionBinding:
+    name: str
+    version: str
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
+class PackageManifestBinding:
+    path: str
+    sha256: str
+    packages: tuple[PackageVersionBinding, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +100,7 @@ class UnityCompilationContext:
     unity_version: str | None
     assembly: AssemblyDefinitionBinding | None
     applicability: AssemblyApplicabilityBinding
+    package_manifest: PackageManifestBinding | None
     defines: tuple[str, ...]
     metadata_references: tuple[MetadataReferenceBinding, ...]
     project_references: tuple[ProjectReferenceBinding, ...]
@@ -125,6 +158,72 @@ def _is_link_or_reparse(path: Path) -> bool:
     return path.is_symlink() or bool(getattr(info, "st_file_attributes", 0) & _REPARSE_POINT)
 
 
+def _version_key(value: str, *, unity: bool) -> tuple | None:
+    if unity:
+        match = re.fullmatch(
+            r"(\d+)(?:\.(\d+))?(?:\.(\d+)([abfcpx])(\d+)?)?(?:-[0-9A-Za-z.-]+|c\d+)?",
+            value,
+        )
+        if match is None:
+            return None
+        major, minor, patch = (int(item or 0) for item in match.group(1, 2, 3))
+        stage = match.group(4)
+        stage_rank = {None: -1, "a": 0, "b": 1, "f": 2, "c": 2, "p": 3, "x": 4}[stage]
+        increment = int(match.group(5) or 0)
+        return major, minor, patch, stage_rank, increment
+
+    candidate = value.split("+", 1)[0]
+    core, separator, label = candidate.partition("-")
+    parts = core.split(".")
+    if len(parts) not in {2, 3} or any(not item.isdigit() for item in parts):
+        return None
+    numbers = tuple(int(item) for item in parts) + ((0,) if len(parts) == 2 else ())
+    if not separator:
+        return (*numbers, 1, ())
+    if not label:
+        return None
+    prerelease: list[tuple[int, int | str]] = []
+    for part in label.split("."):
+        if not part or not re.fullmatch(r"[0-9A-Za-z-]+", part):
+            return None
+        prerelease.append((0, int(part)) if part.isdigit() else (1, part.casefold()))
+    return (*numbers, 0, tuple(prerelease))
+
+
+def _version_expression_matches(
+    version: str,
+    expression: str,
+    *,
+    unity: bool,
+) -> bool | None:
+    if not expression or any(character.isspace() for character in expression) or "*" in expression:
+        return None
+    actual = _version_key(version, unity=unity)
+    if actual is None:
+        return None
+    if expression[0] in "[(":
+        if expression[-1:] not in ")]":
+            return None
+        body = expression[1:-1]
+        if "," not in body:
+            if expression[0] != "[" or expression[-1] != "]" or not body:
+                return None
+            exact = _version_key(body, unity=unity)
+            return None if exact is None else actual == exact
+        endpoints = body.split(",")
+        if len(endpoints) != 2 or not all(endpoints):
+            return None
+        lower = _version_key(endpoints[0], unity=unity)
+        upper = _version_key(endpoints[1], unity=unity)
+        if lower is None or upper is None or lower > upper:
+            return None
+        lower_ok = actual >= lower if expression[0] == "[" else actual > lower
+        upper_ok = actual <= upper if expression[-1] == "]" else actual < upper
+        return lower_ok and upper_ok
+    minimum = _version_key(expression, unity=unity)
+    return None if minimum is None else actual >= minimum
+
+
 class UnityContextBuilder:
     """Read Unity-generated metadata without starting Unity or project code."""
 
@@ -149,13 +248,22 @@ class UnityContextBuilder:
             document = ET.parse(csproj)
         except ET.ParseError as error:
             raise ValueError(f"invalid generated Unity project XML: {csproj.name}") from error
-        defines = self._defines(document)
+        assembly = self._assembly_definition(assembly_name)
+        unity_version = self._unity_version()
+        package_manifest = self._package_manifest()
+        base_defines = self._defines(document)
+        version_defines = self._evaluate_version_defines(
+            assembly, unity_version, package_manifest
+        )
+        defines = tuple(sorted(
+            set(base_defines) | {
+                item.define for item in version_defines if item.status == "DEFINED"
+            }
+        ))
         references, missing_references = self._metadata_references(document)
         project_references = self._project_references(document)
         sources, missing_sources = self._source_files(document)
-        assembly = self._assembly_definition(assembly_name)
-        applicability = self._assembly_applicability(assembly, defines)
-        unity_version = self._unity_version()
+        applicability = self._assembly_applicability(assembly, defines, version_defines)
 
         limitations: list[str] = []
         if assembly is None:
@@ -173,6 +281,11 @@ class UnityContextBuilder:
             limitations.append("Assembly Definition 与当前平台或 define 不兼容。")
         elif applicability.status == "UNKNOWN":
             limitations.append("Assembly Definition 平台或 define 适用性无法确定。")
+        uncertain_version_defines = [
+            item for item in version_defines if item.status in {"INVALID", "UNKNOWN"}
+        ]
+        if uncertain_version_defines:
+            limitations.append(f"{len(uncertain_version_defines)} 个 Version Define 无法确定。")
         if missing_references:
             limitations.append(f"{len(missing_references)} 个 metadata reference 不存在。")
         unverified_outputs = [item for item in project_references if item.status == "BOUND_UNVERIFIED"]
@@ -191,6 +304,7 @@ class UnityContextBuilder:
             "unity_version": unity_version,
             "assembly": asdict(assembly) if assembly else None,
             "applicability": asdict(applicability),
+            "package_manifest": asdict(package_manifest) if package_manifest else None,
             "defines": list(defines),
             "metadata_references": [asdict(item) for item in references],
             "project_references": [asdict(item) for item in project_references],
@@ -203,6 +317,7 @@ class UnityContextBuilder:
             unity_version=unity_version,
             assembly=assembly,
             applicability=applicability,
+            package_manifest=package_manifest,
             defines=defines,
             metadata_references=references,
             project_references=project_references,
@@ -280,11 +395,14 @@ class UnityContextBuilder:
     def _assembly_applicability(
         assembly: AssemblyDefinitionBinding | None,
         defines: tuple[str, ...],
+        version_defines: tuple[VersionDefineEvaluation, ...],
     ) -> AssemblyApplicabilityBinding:
         defined = set(defines)
         active_platforms = UnityContextBuilder._active_platforms(defined)
         if assembly is None:
-            return AssemblyApplicabilityBinding("UNKNOWN", active_platforms, "UNKNOWN", ())
+            return AssemblyApplicabilityBinding(
+                "UNKNOWN", active_platforms, "UNKNOWN", (), version_defines
+            )
 
         include = {item.casefold() for item in assembly.include_platforms}
         exclude = {item.casefold() for item in assembly.exclude_platforms}
@@ -334,6 +452,7 @@ class UnityContextBuilder:
             active_platforms=active_platforms,
             platform_status=platform_status,
             define_constraints=tuple(evaluations),
+            version_defines=version_defines,
         )
 
     @staticmethod
@@ -359,6 +478,72 @@ class UnityContextBuilder:
             active.append("WindowsStandalone64" if "UNITY_64" in defines else "WindowsStandalone32")
         return tuple(sorted(set(active), key=str.casefold))
 
+    def _package_manifest(self) -> PackageManifestBinding | None:
+        path = self.root / "Packages" / "packages-lock.json"
+        if not path.is_file():
+            return None
+        if _is_link_or_reparse(path):
+            raise UnsafePathError("Packages/packages-lock.json is a link/reparse point")
+        try:
+            document = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (UnicodeError, json.JSONDecodeError) as error:
+            raise ValueError("invalid Packages/packages-lock.json") from error
+        dependencies = document.get("dependencies")
+        if not isinstance(dependencies, dict):
+            raise ValueError("Packages/packages-lock.json has no dependencies object")
+        packages: list[PackageVersionBinding] = []
+        for name, details in dependencies.items():
+            if not isinstance(details, dict) or not isinstance(details.get("version"), str):
+                raise ValueError(f"invalid package lock entry: {name}")
+            packages.append(PackageVersionBinding(
+                name=str(name),
+                version=details["version"],
+                source=str(details.get("source", "unknown")),
+            ))
+        return PackageManifestBinding(
+            path="Packages/packages-lock.json",
+            sha256=self._hash_file(path),
+            packages=tuple(sorted(packages, key=lambda item: item.name.casefold())),
+        )
+
+    @staticmethod
+    def _evaluate_version_defines(
+        assembly: AssemblyDefinitionBinding | None,
+        unity_version: str | None,
+        package_manifest: PackageManifestBinding | None,
+    ) -> tuple[VersionDefineEvaluation, ...]:
+        if assembly is None:
+            return ()
+        packages = {
+            item.name: item.version for item in package_manifest.packages
+        } if package_manifest else {}
+        evaluations: list[VersionDefineEvaluation] = []
+        for item in assembly.version_defines:
+            is_unity = item.resource.casefold() == "unity"
+            resource_version = unity_version if is_unity else packages.get(item.resource)
+            valid_define = bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", item.define))
+            if not valid_define or not item.resource or not item.expression:
+                status = "INVALID"
+            elif resource_version is None:
+                status = (
+                    "UNKNOWN" if is_unity or package_manifest is None else "NOT_DEFINED"
+                )
+            elif _version_key(resource_version, unity=is_unity) is None:
+                status = "UNKNOWN"
+            else:
+                outcome = _version_expression_matches(
+                    resource_version, item.expression, unity=is_unity
+                )
+                status = "INVALID" if outcome is None else "DEFINED" if outcome else "NOT_DEFINED"
+            evaluations.append(VersionDefineEvaluation(
+                resource=item.resource,
+                expression=item.expression,
+                define=item.define,
+                resource_version=resource_version,
+                status=status,
+            ))
+        return tuple(evaluations)
+
     def _assembly_definition(self, assembly_name: str) -> AssemblyDefinitionBinding | None:
         matches: list[tuple[Path, dict]] = []
         for path in sorted((self.root / "Assets").rglob("*.asmdef")):
@@ -376,6 +561,11 @@ class UnityContextBuilder:
             return None
         path, value = matches[0]
         relative = path.relative_to(self.root).as_posix()
+        raw_version_defines = value.get("versionDefines", [])
+        if not isinstance(raw_version_defines, list) or any(
+            not isinstance(item, dict) for item in raw_version_defines
+        ):
+            raise ValueError(f"invalid versionDefines in asmdef: {path}")
         return AssemblyDefinitionBinding(
             name=assembly_name,
             path=relative,
@@ -385,6 +575,14 @@ class UnityContextBuilder:
             include_platforms=tuple(sorted(str(item) for item in value.get("includePlatforms", []))),
             exclude_platforms=tuple(sorted(str(item) for item in value.get("excludePlatforms", []))),
             define_constraints=tuple(sorted(str(item) for item in value.get("defineConstraints", []))),
+            version_defines=tuple(sorted((
+                VersionDefineBinding(
+                    resource=str(item.get("name", "")),
+                    expression=str(item.get("expression", "")),
+                    define=str(item.get("define", "")),
+                )
+                for item in raw_version_defines
+            ), key=lambda item: (item.define, item.resource, item.expression))),
             no_engine_references=bool(value.get("noEngineReferences", False)),
         )
 

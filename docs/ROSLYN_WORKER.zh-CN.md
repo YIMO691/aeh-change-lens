@@ -11,7 +11,7 @@
 - 输入源码原始字节与 snapshot SHA-256 强绑定，转码后的 Worker 文本另有传输 SHA-256，路径必须是安全的 Git 风格相对路径；
 - 输出符合 `analyzer-result.schema.json`；
 - 类型、方法、条件、throw、return 和状态节点；
-- `DIRECT_CALL`、`BRANCHES_TO`、`THROWS_FROM`、`RETURNS_FROM`、`WRITES_STATE`；
+- `DIRECT_CALL`、`BRANCHES_TO`、`THROWS_FROM`、`RETURNS_FROM`、`READS_STATE`、`WRITES_STATE`；
 - Unity 生命周期、UnityEvent、`[SerializeField]` 引用；
 - `SendMessage` 显式输出 `DYNAMIC_DISPATCH_UNKNOWN / UNKNOWN`；
 - 节点、边、位置、来源与置信度确定性排序。
@@ -21,6 +21,7 @@
 - 源码编码严格识别 UTF-8、UTF-8 BOM、UTF-16 BOM 和 GB18030，不支持的编码 fail closed；
 - `Library/ScriptAssemblies` 输出没有源码来源绑定时标为 `PROJECT_UNVERIFIED`，且不会进入 Worker metadata references；
 - 按 Unity 规则判定 asmdef include/exclude platform 与 Define Constraints，`EXCLUDED` 程序集不能装配为 Worker 输入；
+- 从快照绑定的 `ProjectVersion.txt` 与 `Packages/packages-lock.json` 求值 Version Defines；支持区间、精确版本和裸版本下限，非法或不可解析来源显式降为 `INVALID`/`UNKNOWN`；
 - 输出 Coroutine 启动、yield、await、C# event/delegate 订阅与发布、常见组件查找关系；
 - metadata DLL 在进入 Worker 前后均以 SHA-256 校验，symlink/reparse point 被拒绝；
 - 真实 Unity metadata 中存在 `MonoBehaviour`、`UnityEventBase` 且上下文声明完整时，Unity 框架关系才允许升级为 `CONFIRMED_STATIC`。
@@ -37,8 +38,8 @@
 ## `CL-GATE-02` 仍缺少
 
 - 为 `Library/ScriptAssemblies` 输出建立可验证的源码、编译选项和产物来源绑定；
-- 求值 asmdef Version Defines，并覆盖更多平台名称变体；
-- 补充状态读取、事件移除、复杂 delegate、Inspector 绑定与组件 API 变体；
+- 覆盖更多平台名称与非 registry 包版本变体；
+- 补充状态别名、事件移除、Inspector 绑定与组件 API 变体；
 - OLD/NEW 两套 Golden Graph 与人工标注逐项比对；
 - 能力矩阵、性能与更多 adversarial cases。
 
@@ -46,10 +47,10 @@
 
 ## ET6 只读试点
 
-在 `D:\ares\project\ET6\Unity` 的 Unity 2020.3.26f1c1 项目上，Context Builder 已读取 `Unity.Model`：140 个 define、221 个 metadata reference（其中 69 个 Unity reference）、632 个 Compile source 和 5 个 ProjectReference。递归图包含 6 个程序集和 12 条依赖，6 个程序集均判定为当前 Editor 上适用；632 个源码全部从含 9,325 个所选文件的工作树快照装配，其中 UTF-8 336、UTF-8 BOM 273、GB18030 23。
+在 `D:\ares\project\ET6\Unity` 的 Unity 2020.3.26f1c1 项目上，Context Builder 已读取 `Unity.Model`：140 个 define、221 个 metadata reference（其中 69 个 Unity reference）、632 个 Compile source、5 个 ProjectReference 和 48 个锁定包。递归图包含 6 个程序集和 12 条依赖，6 个程序集均判定为当前 Editor 上适用；这些程序集没有 Version Define 条目。632 个源码全部从含 9,328 个所选文件的工作树快照装配，其中 UTF-8 336、UTF-8 BOM 273、GB18030 23。
 
-真实 metadata 合成样本中的生命周期、UnityEvent、协程启动和组件查找边达到 `CONFIRMED_STATIC`。实际 632 文件静态分析得到 12,377 个节点、8,869 条边，其中 `AWAITS=12`、`DIRECT_CALL=1268`；由于 4 个项目程序集产物尚无来源绑定并产生未解析符号，结果仍正确为 `PARTIAL`。
+真实 metadata 合成样本中的生命周期、UnityEvent、协程启动和组件查找边达到 `CONFIRMED_STATIC`。实际 632 文件静态分析得到 22,382 个节点、18,874 条边，其中 `READS_STATE=9994`、`WRITES_STATE=251`、`AWAITS=12`、`DIRECT_CALL=1268`；由于 4 个项目程序集产物尚无来源绑定并产生 51 条诊断，结果仍正确为 `PARTIAL`。
 
-试点只读取项目和 Unity 安装目录；未 checkout、未启动 Unity、未编译或执行 ET6 项目代码，前后 Git status 指纹一致。
+试点只读取项目和 Unity 安装目录；未 checkout、未启动 Unity、未编译或执行 ET6 项目代码。前后 Git status 均为 203 条，规范化内容 SHA-256 均为 `7c47c6fd1bce7f21375a4c965e6bcbb92ae937e765b84b30ea6af25432389228`。
 
 逐项覆盖与限制见 [C#/Unity 分析能力矩阵](CAPABILITY_MATRIX.zh-CN.md)。
