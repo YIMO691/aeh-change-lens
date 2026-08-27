@@ -19,6 +19,10 @@
 - snapshot-only Worker input assembly with pre/post stale checks;
 - separate raw-snapshot and UTF-8 transport digests for legacy source encoding;
 - strict UTF-8, UTF BOM and GB18030 source decoding;
+- asmdef include/exclude platform and Define Constraints evaluation;
+- fail-closed rejection before Worker input when the assembly is excluded;
+- coroutine start/yield, async await, C# event/delegate subscription and publication;
+- common generic and `typeof` Unity component lookups;
 - confidence upgrade only when a bound `UnityEngine.CoreModule.dll` resolves
   `MonoBehaviour` and `UnityEventBase`;
 - caller-provided source stubs cannot overstate Unity context.
@@ -37,8 +41,11 @@ selected_snapshot_files=9325
 assembled_source_files=632
 source_encodings=UTF-8:336,UTF-8-BOM:273,GB18030:23
 completeness=PARTIAL
-context_digest=30242841ab9333fdf5f5c0e0257959a659f7f1c9f465c9838c7e259fb318655c
-assembly_graph_digest=3bb255e149e693090d7c3fd4865127fd7773890eae44ef025ba0b5d7c9ef1f87
+assembly_applicability=APPLICABLE
+active_platform=Editor
+applicable_graph_assemblies=6/6
+context_digest=e3a34a0877dbf3f6c1ceb259a169bac9af39efac6d4c405f21f0e3e3c91aaae6
+assembly_graph_digest=32948fc0585e5336c3386aaab4ddec6a063b1255c58185c934d99b04e14d9d2e
 ```
 
 The graph recursively follows the five root `ProjectReference` entries. Four
@@ -53,8 +60,28 @@ snapshot digests; the Worker receives a separate digest for transcoded UTF-8
 text. Snapshot and Unity context are checked both before and after assembly.
 
 A synthetic `PilotBehaviour` compiled only in memory against the digest-bound
-Unity 2020.3 metadata. Its lifecycle and UnityEvent relations were emitted as
-`CONFIRMED_STATIC`.
+Unity 2020.3 metadata. Its lifecycle, UnityEvent, coroutine-start and component-
+lookup relations were emitted as `CONFIRMED_STATIC`; yield remains `STRUCTURAL`.
+
+The complete 632-source payload was also analyzed in memory without emitting or
+executing project code:
+
+```text
+status=PARTIAL
+nodes=12377
+edges=8869
+diagnostics=51
+AWAITS=12
+BRANCHES_TO=3056
+DIRECT_CALL=1268
+RETURNS_FROM=2371
+THROWS_FROM=1922
+WRITES_STATE=240
+```
+
+The 50 compiler diagnostics are retained as warnings rather than hidden. They
+are expected while four generated project-assembly dependencies remain
+`PROJECT_UNVERIFIED`; the additional diagnostic discloses partial Unity context.
 
 ## Raw verification
 
@@ -69,7 +96,7 @@ Latest result:
 
 ```text
 Build succeeded: 0 warnings, 0 errors
-Ran 40 tests in 98.433s
+Ran 45 tests in 97.846s
 OK (skipped=1)
 ```
 
@@ -92,7 +119,7 @@ compiled, executed, staged, or cleaned.
 ## Remaining before CL-GATE-02
 
 - bind verifiable build provenance for generated ScriptAssemblies outputs;
-- evaluate platform and define constraints;
-- add coroutine, async/await, delegate, C# event and component relations;
+- evaluate Version Defines and additional platform aliases;
+- add state reads, event removal, complex delegate and Inspector bindings;
 - produce and measure OLD/NEW golden graphs against manual annotation;
 - run performance and adversarial matrices.

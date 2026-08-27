@@ -106,6 +106,17 @@ class WorkerInputAssemblerTests(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotStaleError, "compilation context changed"):
             WorkerInputAssembler(self.resolver, self.root).assemble(binding, context, "STALE-CONTEXT")
 
+    def test_excluded_assembly_cannot_be_sent_to_worker(self) -> None:
+        asmdef = self.root / "Assets/Game/Game.asmdef"
+        asmdef.write_text(
+            '{"name":"Game","defineConstraints":["MISSING_DEFINE"]}\n',
+            encoding="utf-8",
+        )
+        binding = self.resolver.resolve_worktree("NEW")
+        context = UnityContextBuilder(self.root).build("Game")
+        with self.assertRaisesRegex(ValueError, "assembly is excluded"):
+            WorkerInputAssembler(self.resolver, self.root).assemble(binding, context, "EXCLUDED")
+
     def test_gb18030_source_preserves_raw_snapshot_digest(self) -> None:
         legacy = "class Entry { string Text = \"中文\"; }\n"
         self.source.write_bytes(legacy.encode("gb18030"))

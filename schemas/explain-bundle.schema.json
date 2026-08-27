@@ -102,6 +102,8 @@
             "CONDITION",
             "RETURN",
             "THROW",
+            "YIELD",
+            "AWAIT",
             "STATE",
             "EVENT",
             "UNKNOWN_TARGET"

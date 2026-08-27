@@ -36,6 +36,7 @@ def worker_input() -> dict:
     fixture = ROOT / "fixtures" / "unity-minimal" / "target" / "Assets" / "Scripts" / "Gameplay"
     sources = [
         source_file(ROOT / "tests" / "analyzer" / "UnityStubs.cs", "__stubs__/UnityEngine.cs"),
+        source_file(ROOT / "tests" / "analyzer" / "FlowPatterns.cs", "Assets/Pilot/FlowPatterns.cs"),
         source_file(fixture / "RewardController.cs", "Assets/Scripts/Gameplay/RewardController.cs"),
         source_file(fixture / "RewardPolicy.cs", "Assets/Scripts/Gameplay/RewardPolicy.cs"),
         source_file(fixture / "Wallet.cs", "Assets/Scripts/Gameplay/Wallet.cs"),
@@ -99,6 +100,8 @@ class RoslynWorkerTests(unittest.TestCase):
             "FRAMEWORK_LIFECYCLE", "DIRECT_CALL", "BRANCHES_TO", "THROWS_FROM",
             "RETURNS_FROM", "WRITES_STATE", "INVOKES_UNITY_EVENT",
             "SERIALIZED_REFERENCE", "DYNAMIC_DISPATCH_UNKNOWN",
+            "STARTS_COROUTINE", "YIELDS_TO", "AWAITS", "SUBSCRIBES_EVENT",
+            "PUBLISHES_EVENT", "COMPONENT_LOOKUP",
         }.issubset(relations))
 
         lifecycle_edges = [edge for edge in edges if edge["relation"] == "FRAMEWORK_LIFECYCLE"]
@@ -114,10 +117,44 @@ class RoslynWorkerTests(unittest.TestCase):
         self.assertEqual("UNKNOWN", dynamic_edges[0]["provenance"]["confidence"])
         self.assertEqual("RefreshHud", nodes[dynamic_edges[0]["target_node_id"]]["label"])
 
-        unity_relations = {"FRAMEWORK_LIFECYCLE", "INVOKES_UNITY_EVENT", "SERIALIZED_REFERENCE"}
+        unity_relations = {
+            "FRAMEWORK_LIFECYCLE", "INVOKES_UNITY_EVENT", "SERIALIZED_REFERENCE",
+            "STARTS_COROUTINE", "COMPONENT_LOOKUP",
+        }
         self.assertTrue(all(
             edge["provenance"]["confidence"] != "CONFIRMED_STATIC"
             for edge in edges if edge["relation"] in unity_relations
+        ))
+        self.assertTrue(all(
+            edge["provenance"]["confidence"] == "CONFIRMED_STATIC"
+            for edge in edges if edge["relation"] in {
+                "AWAITS", "SUBSCRIBES_EVENT", "PUBLISHES_EVENT",
+            }
+        ))
+        self.assertTrue(all(
+            edge["provenance"]["confidence"] == "STRUCTURAL"
+            for edge in edges if edge["relation"] == "YIELDS_TO"
+        ))
+        coroutine_edges = [edge for edge in edges if edge["relation"] == "STARTS_COROUTINE"]
+        self.assertTrue(any(
+            "Run" in nodes[edge["target_node_id"]]["label"] and
+            edge["provenance"]["confidence"] == "STRUCTURAL"
+            for edge in coroutine_edges
+        ))
+        self.assertTrue(any(
+            nodes[edge["target_node_id"]]["label"] == "LegacyFlow" and
+            edge["provenance"]["confidence"] == "UNKNOWN"
+            for edge in coroutine_edges
+        ))
+        component_edges = [edge for edge in edges if edge["relation"] == "COMPONENT_LOOKUP"]
+        self.assertGreaterEqual(len(component_edges), 2)
+        self.assertTrue(any(
+            "OtherComponent" in nodes[edge["target_node_id"]]["label"]
+            for edge in component_edges
+        ))
+        subscription_edges = [edge for edge in edges if edge["relation"] == "SUBSCRIBES_EVENT"]
+        self.assertTrue(all(
+            "+=" in nodes[edge["target_node_id"]]["label"] for edge in subscription_edges
         ))
 
     def test_content_digest_mismatch_fails_closed(self) -> None:
@@ -164,12 +201,20 @@ class RealUnityMetadataWorkerTests(unittest.TestCase):
         unity_root = Path(os.environ["CHANGE_LENS_UNITY_PROJECT"])
         assembly = os.environ.get("CHANGE_LENS_UNITY_ASSEMBLY", "Unity.Model")
         context = UnityContextBuilder(unity_root).build(assembly)
-        content = """using UnityEngine;
+        content = """using System.Collections;
+using UnityEngine;
 using UnityEngine.Events;
+public sealed class PilotComponent : MonoBehaviour { }
 public sealed class PilotBehaviour : MonoBehaviour
 {
     public UnityEvent changed;
-    private void Awake() { changed.Invoke(); }
+    private void Awake()
+    {
+        changed.Invoke();
+        StartCoroutine(Run());
+        GetComponent<PilotComponent>();
+    }
+    private IEnumerator Run() { yield return null; }
 }
 """
         payload = {
@@ -198,7 +243,10 @@ public sealed class PilotBehaviour : MonoBehaviour
         self.assertEqual(0, completed.returncode, completed.stderr)
         result = json.loads(completed.stdout)
         self.assertEqual("COMPLETE", result["status"], result["diagnostics"])
-        framework = {"FRAMEWORK_LIFECYCLE", "INVOKES_UNITY_EVENT"}
+        framework = {
+            "FRAMEWORK_LIFECYCLE", "INVOKES_UNITY_EVENT",
+            "STARTS_COROUTINE", "COMPONENT_LOOKUP",
+        }
         related = [edge for edge in result["edges"] if edge["relation"] in framework]
         self.assertEqual(framework, {edge["relation"] for edge in related})
         self.assertTrue(all(edge["provenance"]["confidence"] == "CONFIRMED_STATIC" for edge in related))

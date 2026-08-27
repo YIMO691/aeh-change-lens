@@ -65,6 +65,8 @@ class WorkerInputAssembler:
             raise ValueError("request_id is empty or contains NUL")
         if context.assembly is None:
             raise ValueError("Unity context has no bound assembly definition")
+        if context.applicability.status == "EXCLUDED":
+            raise ValueError("Unity assembly is excluded by the active platform or define constraints")
         self._assert_snapshot_current(binding)
         self._assert_context_current(context)
         self._assert_asmdef_bound(binding, context)

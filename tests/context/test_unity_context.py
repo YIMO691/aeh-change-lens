@@ -60,6 +60,9 @@ class UnityContextBuilderTests(unittest.TestCase):
         self.assertEqual(("FEATURE_X", "UNITY_EDITOR"), first.defines)
         self.assertEqual("Game", first.assembly.name)
         self.assertEqual("Assets/Game/Game.asmdef", first.assembly.path)
+        self.assertEqual("APPLICABLE", first.applicability.status)
+        self.assertEqual(("Editor",), first.applicability.active_platforms)
+        self.assertTrue(first.applicability.define_constraints[0].satisfied)
         self.assertEqual(1, len(first.metadata_references))
         self.assertEqual("UNITY", first.metadata_references[0].kind)
         self.assertEqual(64, len(first.metadata_references[0].sha256))
@@ -93,6 +96,61 @@ class UnityContextBuilderTests(unittest.TestCase):
         self.assertEqual("OUTSIDE_UNITY_ROOT", graph.dependencies[0].status)
         self.assertEqual(1, len(graph.assemblies))
         self.assertEqual("PARTIAL", graph.completeness)
+
+    def test_define_constraint_or_and_negation_are_evaluated(self) -> None:
+        asmdef = self.root / "Assets/Game/Game.asmdef"
+        value = json.loads(asmdef.read_text(encoding="utf-8"))
+        value["defineConstraints"] = [
+            "MISSING || FEATURE_X",
+            "!ENABLE_IL2CPP",
+        ]
+        asmdef.write_text(json.dumps(value), encoding="utf-8")
+
+        context = UnityContextBuilder(self.root).build("Game")
+
+        self.assertEqual("APPLICABLE", context.applicability.status)
+        self.assertEqual((True, True), tuple(
+            item.satisfied for item in context.applicability.define_constraints
+        ))
+
+    def test_excluded_define_constraint_is_explicit(self) -> None:
+        asmdef = self.root / "Assets/Game/Game.asmdef"
+        value = json.loads(asmdef.read_text(encoding="utf-8"))
+        value["defineConstraints"] = ["REQUIRES_MISSING_DEFINE"]
+        asmdef.write_text(json.dumps(value), encoding="utf-8")
+
+        context = UnityContextBuilder(self.root).build("Game")
+
+        self.assertEqual("EXCLUDED", context.applicability.status)
+        self.assertEqual("PARTIAL", context.completeness)
+        self.assertTrue(any("不兼容" in item for item in context.limitations))
+        validate("unity-context.schema.json", context.to_dict())
+
+    def test_platform_include_mismatch_is_explicit(self) -> None:
+        asmdef = self.root / "Assets/Game/Game.asmdef"
+        value = json.loads(asmdef.read_text(encoding="utf-8"))
+        value["includePlatforms"] = ["Android"]
+        asmdef.write_text(json.dumps(value), encoding="utf-8")
+
+        context = UnityContextBuilder(self.root).build("Game")
+
+        self.assertEqual(("Editor",), context.applicability.active_platforms)
+        self.assertEqual("EXCLUDED", context.applicability.platform_status)
+        self.assertEqual("EXCLUDED", context.applicability.status)
+
+    def test_invalid_define_constraint_is_serialized_as_unknown(self) -> None:
+        asmdef = self.root / "Assets/Game/Game.asmdef"
+        value = json.loads(asmdef.read_text(encoding="utf-8"))
+        value["defineConstraints"] = ["FEATURE_X ||"]
+        asmdef.write_text(json.dumps(value), encoding="utf-8")
+
+        context = UnityContextBuilder(self.root).build("Game")
+
+        evaluation = context.applicability.define_constraints[0]
+        self.assertFalse(evaluation.valid)
+        self.assertIsNone(evaluation.satisfied)
+        self.assertEqual("UNKNOWN", context.applicability.status)
+        validate("unity-context.schema.json", context.to_dict())
 
     def test_build_graph_follows_project_reference_without_trusting_output(self) -> None:
         (self.root / "Assets/Dependency").mkdir()
@@ -147,6 +205,7 @@ class RealUnityReadOnlyPilotTests(unittest.TestCase):
         self.assertEqual(before, after)
         self.assertIsNotNone(context.assembly)
         self.assertTrue(context.unity_version)
+        self.assertEqual("APPLICABLE", context.applicability.status)
         self.assertTrue(any(
             Path(item.path).name.casefold() == "unityengine.coremodule.dll"
             for item in context.metadata_references

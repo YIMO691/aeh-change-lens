@@ -36,6 +36,22 @@ class AssemblyDefinitionBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class DefineConstraintEvaluation:
+    expression: str
+    terms: tuple[str, ...]
+    valid: bool
+    satisfied: bool | None
+
+
+@dataclass(frozen=True, slots=True)
+class AssemblyApplicabilityBinding:
+    status: str
+    active_platforms: tuple[str, ...]
+    platform_status: str
+    define_constraints: tuple[DefineConstraintEvaluation, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ProjectReferenceBinding:
     include: str
     assembly_name: str
@@ -51,6 +67,7 @@ class UnityCompilationContext:
     completeness: str
     unity_version: str | None
     assembly: AssemblyDefinitionBinding | None
+    applicability: AssemblyApplicabilityBinding
     defines: tuple[str, ...]
     metadata_references: tuple[MetadataReferenceBinding, ...]
     project_references: tuple[ProjectReferenceBinding, ...]
@@ -137,6 +154,7 @@ class UnityContextBuilder:
         project_references = self._project_references(document)
         sources, missing_sources = self._source_files(document)
         assembly = self._assembly_definition(assembly_name)
+        applicability = self._assembly_applicability(assembly, defines)
         unity_version = self._unity_version()
 
         limitations: list[str] = []
@@ -146,8 +164,15 @@ class UnityContextBuilder:
             limitations.append("未读取到 Unity ProjectVersion。")
         if not defines:
             limitations.append("生成 csproj 未提供 DefineConstants。")
-        if not any(Path(item.path).name.casefold() == "unityengine.coremodule.dll" for item in references):
+        if (
+            not (assembly and assembly.no_engine_references)
+            and not any(Path(item.path).name.casefold() == "unityengine.coremodule.dll" for item in references)
+        ):
             limitations.append("未绑定 UnityEngine.CoreModule.dll。")
+        if applicability.status == "EXCLUDED":
+            limitations.append("Assembly Definition 与当前平台或 define 不兼容。")
+        elif applicability.status == "UNKNOWN":
+            limitations.append("Assembly Definition 平台或 define 适用性无法确定。")
         if missing_references:
             limitations.append(f"{len(missing_references)} 个 metadata reference 不存在。")
         unverified_outputs = [item for item in project_references if item.status == "BOUND_UNVERIFIED"]
@@ -165,6 +190,7 @@ class UnityContextBuilder:
             "completeness": completeness,
             "unity_version": unity_version,
             "assembly": asdict(assembly) if assembly else None,
+            "applicability": asdict(applicability),
             "defines": list(defines),
             "metadata_references": [asdict(item) for item in references],
             "project_references": [asdict(item) for item in project_references],
@@ -176,6 +202,7 @@ class UnityContextBuilder:
             completeness=completeness,
             unity_version=unity_version,
             assembly=assembly,
+            applicability=applicability,
             defines=defines,
             metadata_references=references,
             project_references=project_references,
@@ -248,6 +275,89 @@ class UnityContextBuilder:
             if line.startswith("m_EditorVersion:"):
                 return line.partition(":")[2].strip() or None
         return None
+
+    @staticmethod
+    def _assembly_applicability(
+        assembly: AssemblyDefinitionBinding | None,
+        defines: tuple[str, ...],
+    ) -> AssemblyApplicabilityBinding:
+        defined = set(defines)
+        active_platforms = UnityContextBuilder._active_platforms(defined)
+        if assembly is None:
+            return AssemblyApplicabilityBinding("UNKNOWN", active_platforms, "UNKNOWN", ())
+
+        include = {item.casefold() for item in assembly.include_platforms}
+        exclude = {item.casefold() for item in assembly.exclude_platforms}
+        active = {item.casefold() for item in active_platforms}
+        if include and exclude:
+            platform_status = "INVALID"
+        elif not include and not exclude:
+            platform_status = "APPLICABLE"
+        elif not active:
+            platform_status = "UNKNOWN"
+        elif include:
+            platform_status = "APPLICABLE" if include & active else "EXCLUDED"
+        else:
+            platform_status = "EXCLUDED" if exclude & active else "APPLICABLE"
+
+        evaluations: list[DefineConstraintEvaluation] = []
+        for expression in assembly.define_constraints:
+            raw_terms = tuple(item.strip() for item in expression.split("||"))
+            valid = bool(raw_terms) and all(
+                term and re.fullmatch(r"!?[A-Za-z_][A-Za-z0-9_]*", term)
+                for term in raw_terms
+            )
+            satisfied: bool | None
+            if not valid:
+                satisfied = None
+            else:
+                satisfied = any(
+                    term[1:] not in defined if term.startswith("!") else term in defined
+                    for term in raw_terms
+                )
+            evaluations.append(DefineConstraintEvaluation(expression, raw_terms, valid, satisfied))
+
+        constraint_values = [item.satisfied for item in evaluations]
+        constraints_status = (
+            "UNKNOWN" if any(item is None for item in constraint_values)
+            else "EXCLUDED" if any(item is False for item in constraint_values)
+            else "APPLICABLE"
+        )
+        if "EXCLUDED" in {platform_status, constraints_status}:
+            status = "EXCLUDED"
+        elif "UNKNOWN" in {platform_status, constraints_status} or platform_status == "INVALID":
+            status = "UNKNOWN"
+        else:
+            status = "APPLICABLE"
+        return AssemblyApplicabilityBinding(
+            status=status,
+            active_platforms=active_platforms,
+            platform_status=platform_status,
+            define_constraints=tuple(evaluations),
+        )
+
+    @staticmethod
+    def _active_platforms(defines: set[str]) -> tuple[str, ...]:
+        if "UNITY_EDITOR" in defines:
+            return ("Editor",)
+        mappings = (
+            ("UNITY_ANDROID", "Android"),
+            ("UNITY_IOS", "iOS"),
+            ("UNITY_TVOS", "tvOS"),
+            ("UNITY_WEBGL", "WebGL"),
+            ("UNITY_WSA", "WSA"),
+            ("UNITY_STANDALONE_OSX", "macOSStandalone"),
+            ("UNITY_STANDALONE_LINUX", "LinuxStandalone64"),
+            ("UNITY_PS4", "PS4"),
+            ("UNITY_PS5", "PS5"),
+            ("UNITY_XBOXONE", "XboxOne"),
+            ("UNITY_GAMECORE", "GameCoreXboxSeries"),
+            ("UNITY_SWITCH", "Switch"),
+        )
+        active = [platform for symbol, platform in mappings if symbol in defines]
+        if "UNITY_STANDALONE_WIN" in defines:
+            active.append("WindowsStandalone64" if "UNITY_64" in defines else "WindowsStandalone32")
+        return tuple(sorted(set(active), key=str.casefold))
 
     def _assembly_definition(self, assembly_name: str) -> AssemblyDefinitionBinding | None:
         matches: list[tuple[Path, dict]] = []

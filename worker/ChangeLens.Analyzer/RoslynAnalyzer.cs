@@ -201,6 +201,8 @@ internal static class RoslynAnalyzer
                     AddLifecycle(method, methodSymbol, methodNode);
                     AddControlFlow(method, methodNode);
                     AddInvocations(method, model, methodNode);
+                    AddAsyncAndCoroutineFlow(method, model, methodNode);
+                    AddEventRelations(method, model, methodNode);
                     AddStateWrites(method, model, methodNode);
                 }
                 AddSerializedReferences(root, model);
@@ -261,23 +263,171 @@ internal static class RoslynAnalyzer
                 }
 
                 var targetSymbol = model.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+                if (name == "StartCoroutine" && targetSymbol is not null &&
+                    DerivesFrom(targetSymbol.ContainingType, "UnityEngine.MonoBehaviour"))
+                {
+                    AddCoroutineStart(invocation, model, methodNode);
+                    continue;
+                }
+
+                if (targetSymbol is not null && IsComponentLookup(targetSymbol.Name) &&
+                    IsUnityComponentApi(targetSymbol.ContainingType))
+                {
+                    AddComponentLookup(invocation, targetSymbol, model, methodNode);
+                    continue;
+                }
+
                 if (targetSymbol is not null && _symbolNodes.TryGetValue(targetSymbol.OriginalDefinition, out var targetNode))
                 {
                     AddEdge(methodNode, targetNode, "DIRECT_CALL", "roslyn_semantic_model", "CONFIRMED_STATIC");
                     continue;
                 }
 
-                if (name == "Invoke" && invocation.Expression is MemberAccessExpressionSyntax access)
+                if (name == "Invoke" && InvocationReceiver(invocation) is { } receiver)
                 {
-                    var receiverType = model.GetTypeInfo(access.Expression).Type;
+                    var receiverType = model.GetTypeInfo(receiver).Type;
                     if (receiverType is not null && DerivesFrom(receiverType, "UnityEngine.Events.UnityEventBase"))
                     {
                         var confidence = UnityConfidence();
-                        var target = AddSyntheticNode(Id("unity-event", invocation), "EVENT", access.Expression.ToString(), invocation, "roslyn_semantic_model", confidence);
+                        var target = AddSyntheticNode(Id("unity-event", invocation), "EVENT", receiver.ToString(), invocation, "roslyn_semantic_model", confidence);
                         AddEdge(methodNode, target, "INVOKES_UNITY_EVENT", "roslyn_semantic_model", confidence);
                     }
                 }
             }
+        }
+
+        private void AddCoroutineStart(
+            InvocationExpressionSyntax invocation,
+            SemanticModel model,
+            GraphNode methodNode)
+        {
+            var argument = invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
+            if (argument is InvocationExpressionSyntax targetInvocation &&
+                model.GetSymbolInfo(targetInvocation).Symbol is IMethodSymbol targetSymbol &&
+                _symbolNodes.TryGetValue(targetSymbol.OriginalDefinition, out var targetNode))
+            {
+                AddEdge(methodNode, targetNode, "STARTS_COROUTINE", "roslyn_semantic_model", UnityConfidence());
+                return;
+            }
+            var label = argument is LiteralExpressionSyntax literal
+                ? literal.Token.ValueText
+                : argument?.ToString() ?? "unknown coroutine";
+            var unknown = AddSyntheticNode(
+                Id("coroutine", invocation), "UNKNOWN_TARGET", label, invocation,
+                "unity_coroutine_rule", "UNKNOWN");
+            AddEdge(methodNode, unknown, "STARTS_COROUTINE", "unity_coroutine_rule", "UNKNOWN");
+        }
+
+        private void AddAsyncAndCoroutineFlow(
+            MethodDeclarationSyntax method,
+            SemanticModel model,
+            GraphNode methodNode)
+        {
+            foreach (var statement in method.DescendantNodes().OfType<YieldStatementSyntax>())
+            {
+                var target = AddSyntheticNode(
+                    Id("yield", statement), "YIELD",
+                    statement.Expression?.ToString() ?? statement.Kind().ToString(),
+                    statement, "roslyn_syntax", "STRUCTURAL");
+                AddEdge(methodNode, target, "YIELDS_TO", "roslyn_syntax", "STRUCTURAL");
+            }
+            foreach (var expression in method.DescendantNodes().OfType<AwaitExpressionSyntax>())
+            {
+                var symbol = model.GetSymbolInfo(expression.Expression).Symbol as IMethodSymbol;
+                GraphNode target;
+                string confidence;
+                if (symbol is not null && _symbolNodes.TryGetValue(symbol.OriginalDefinition, out var knownTarget))
+                {
+                    target = knownTarget;
+                    confidence = "CONFIRMED_STATIC";
+                }
+                else
+                {
+                    var resolvedType = model.GetTypeInfo(expression.Expression).Type;
+                    confidence = symbol is not null || resolvedType is not null ? "CONFIRMED_STATIC" : "STRUCTURAL";
+                    target = AddSyntheticNode(
+                        Id("await", expression), "AWAIT",
+                        symbol is null ? expression.Expression.ToString() : SymbolName(symbol),
+                        expression, "roslyn_semantic_model", confidence);
+                }
+                AddEdge(methodNode, target, "AWAITS", "roslyn_semantic_model", confidence);
+            }
+        }
+
+        private void AddEventRelations(
+            MethodDeclarationSyntax method,
+            SemanticModel model,
+            GraphNode methodNode)
+        {
+            foreach (var assignment in method.DescendantNodes().OfType<AssignmentExpressionSyntax>()
+                         .Where(item => item.IsKind(SyntaxKind.AddAssignmentExpression)))
+            {
+                var eventSymbol = model.GetSymbolInfo(assignment.Left).Symbol;
+                var handler = model.GetSymbolInfo(assignment.Right).Symbol as IMethodSymbol;
+                if (!IsEventOrDelegate(eventSymbol) || handler is null)
+                    continue;
+                var target = AddSyntheticNode(
+                    $"csharp:{_input.Revision}:subscription:{SymbolName(eventSymbol!)}:{SymbolName(handler)}",
+                    "EVENT", $"{SymbolName(eventSymbol!)} += {SymbolName(handler)}", assignment,
+                    "roslyn_semantic_model", "CONFIRMED_STATIC");
+                AddEdge(methodNode, target, "SUBSCRIBES_EVENT", "roslyn_semantic_model", "CONFIRMED_STATIC");
+            }
+
+            foreach (var invocation in method.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            {
+                var name = invocation.Expression switch
+                {
+                    MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+                    MemberBindingExpressionSyntax member => member.Name.Identifier.ValueText,
+                    IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+                    _ => string.Empty,
+                };
+                if (name != "Invoke" || InvocationReceiver(invocation) is not { } receiver)
+                    continue;
+                var published = model.GetSymbolInfo(receiver).Symbol;
+                var receiverType = model.GetTypeInfo(receiver).Type;
+                if (!IsEventOrDelegate(published) ||
+                    (receiverType is not null && DerivesFrom(receiverType, "UnityEngine.Events.UnityEventBase")))
+                    continue;
+                var target = AddSyntheticNode(
+                    $"csharp:{_input.Revision}:event:{SymbolName(published!)}",
+                    "EVENT", SymbolName(published!), invocation,
+                    "roslyn_semantic_model", "CONFIRMED_STATIC");
+                AddEdge(methodNode, target, "PUBLISHES_EVENT", "roslyn_semantic_model", "CONFIRMED_STATIC");
+            }
+        }
+
+        private void AddComponentLookup(
+            InvocationExpressionSyntax invocation,
+            IMethodSymbol method,
+            SemanticModel model,
+            GraphNode methodNode)
+        {
+            ITypeSymbol? componentType = method.TypeArguments.FirstOrDefault();
+            if (componentType is null || componentType.TypeKind == TypeKind.TypeParameter)
+            {
+                var typeOf = invocation.ArgumentList.Arguments
+                    .Select(item => item.Expression)
+                    .OfType<TypeOfExpressionSyntax>()
+                    .FirstOrDefault();
+                componentType = typeOf is null ? null : model.GetTypeInfo(typeOf.Type).Type;
+            }
+            if (componentType is null || componentType.TypeKind == TypeKind.Error)
+            {
+                var unknown = AddSyntheticNode(
+                    Id("component", invocation), "UNKNOWN_TARGET", invocation.ToString(), invocation,
+                    "unity_component_rule", "UNKNOWN");
+                AddEdge(methodNode, unknown, "COMPONENT_LOOKUP", "unity_component_rule", "UNKNOWN");
+                return;
+            }
+            var confidence = UnityConfidence();
+            var target = _symbolNodes.TryGetValue(componentType, out var knownType)
+                ? knownType
+                : AddSyntheticNode(
+                    $"csharp:{_input.Revision}:component:{SymbolName(componentType)}",
+                    "TYPE", SymbolName(componentType), invocation,
+                    "roslyn_semantic_model", confidence);
+            AddEdge(methodNode, target, "COMPONENT_LOOKUP", "roslyn_semantic_model", confidence);
         }
 
         private void AddStateWrites(MethodDeclarationSyntax method, SemanticModel model, GraphNode methodNode)
@@ -368,5 +518,34 @@ internal static class RoslynAnalyzer
             }
             return false;
         }
+
+        private static ExpressionSyntax? InvocationReceiver(InvocationExpressionSyntax invocation)
+        {
+            if (invocation.Expression is MemberAccessExpressionSyntax access)
+                return access.Expression;
+            if (invocation.Expression is MemberBindingExpressionSyntax &&
+                invocation.Parent is ConditionalAccessExpressionSyntax conditional)
+                return conditional.Expression;
+            return null;
+        }
+
+        private static bool IsEventOrDelegate(ISymbol? symbol)
+            => symbol is IEventSymbol || symbol switch
+            {
+                IFieldSymbol field => field.Type.TypeKind == TypeKind.Delegate,
+                IPropertySymbol property => property.Type.TypeKind == TypeKind.Delegate,
+                ILocalSymbol local => local.Type.TypeKind == TypeKind.Delegate,
+                _ => false,
+            };
+
+        private static bool IsComponentLookup(string name)
+            => name is "GetComponent" or "TryGetComponent" or "GetComponentInChildren" or
+                "GetComponentInParent" or "FindObjectOfType" or "FindAnyObjectByType" or
+                "FindFirstObjectByType";
+
+        private static bool IsUnityComponentApi(ITypeSymbol type)
+            => DerivesFrom(type, "UnityEngine.Component") ||
+                DerivesFrom(type, "UnityEngine.GameObject") ||
+                DerivesFrom(type, "UnityEngine.Object");
     }
 }
