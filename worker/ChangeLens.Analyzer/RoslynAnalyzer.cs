@@ -62,7 +62,7 @@ internal static class RoslynAnalyzer
                 "CL-CS-CTX-001",
                 "WARNING",
                 "Unity metadata、asmdef 或工程引用上下文不完整，框架关系保持部分/结构置信度。",
-                input.SourceFiles.Select(file => file.ContentHash).ToArray()));
+                input.SourceFiles.Select(file => file.SnapshotContentHash).ToArray()));
         }
 
         var status = effectiveUnityContext == "COMPLETE" && compilerErrors.Length == 0 ? "COMPLETE" : "PARTIAL";
@@ -99,8 +99,15 @@ internal static class RoslynAnalyzer
             if (!CryptographicOperations.FixedTimeEquals(
                 Encoding.ASCII.GetBytes(actual), Encoding.ASCII.GetBytes(file.ContentHash)))
                 throw new InvalidDataException($"content_hash mismatch: {file.Path}");
+            if (!IsSha256(file.SnapshotContentHash) || file.SourceEncoding is not (
+                "UTF-8" or "UTF-8-BOM" or "UTF-16-LE-BOM" or "UTF-16-BE-BOM" or "GB18030"))
+                throw new InvalidDataException($"Invalid snapshot provenance: {file.Path}");
         }
     }
+
+    private static bool IsSha256(string value)
+        => value is { Length: 64 } && value.All(character =>
+            character is >= '0' and <= '9' or >= 'a' and <= 'f');
 
     private static bool IsSafeRelativePath(string path)
     {
@@ -324,8 +331,8 @@ internal static class RoslynAnalyzer
                 kind,
                 "UNCHANGED_CONTEXT",
                 label,
-                new SourceLocation(_input.Revision, file.Path, span.StartLinePosition.Line + 1, span.EndLinePosition.Line + 1, file.ContentHash),
-                new Provenance(origin, confidence, [file.ContentHash], confidence == "UNKNOWN" ? ["目标无法由静态源码唯一解析。"] : []),
+                new SourceLocation(_input.Revision, file.Path, span.StartLinePosition.Line + 1, span.EndLinePosition.Line + 1, file.SnapshotContentHash),
+                new Provenance(origin, confidence, [file.SnapshotContentHash], confidence == "UNKNOWN" ? ["目标无法由静态源码唯一解析。"] : []),
                 Array.Empty<string>());
             _nodeIds.Add(id);
             Nodes.Add(node);

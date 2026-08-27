@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeh-change-lens.dev/schemas/unity-assembly-graph.schema.json",
+  "title": "Digest-bound Unity assembly dependency graph",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "root_assembly", "completeness", "assemblies",
+    "dependencies", "limitations", "graph_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "root_assembly": { "type": "string", "minLength": 1 },
+    "completeness": { "enum": ["COMPLETE", "PARTIAL", "MISSING"] },
+    "assemblies": {
+      "type": "array",
+      "items": { "$ref": "unity-context.schema.json" }
+    },
+    "dependencies": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_assembly", "target_assembly", "include", "status"],
+        "properties": {
+          "source_assembly": { "type": "string", "minLength": 1 },
+          "target_assembly": { "type": "string", "minLength": 1 },
+          "include": { "type": "string", "minLength": 1 },
+          "status": {
+            "enum": ["BOUND_UNVERIFIED", "MISSING", "OUTSIDE_UNITY_ROOT", "ANALYZER_ONLY"]
+          }
+        }
+      }
+    },
+    "limitations": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "graph_digest": { "$ref": "common.schema.json#/$defs/sha256" }
+  }
+}

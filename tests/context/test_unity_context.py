@@ -81,6 +81,60 @@ class UnityContextBuilderTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate asmdef"):
             UnityContextBuilder(self.root).build("Game")
 
+    def test_active_project_reference_outside_unity_root_is_not_followed(self) -> None:
+        project = self.root / "Game.csproj"
+        project.write_text(
+            project.read_text(encoding="utf-8").replace(
+                "Dependency.csproj", "../Outside.csproj"
+            ),
+            encoding="utf-8",
+        )
+        graph = UnityContextBuilder(self.root).build_graph("Game")
+        self.assertEqual("OUTSIDE_UNITY_ROOT", graph.dependencies[0].status)
+        self.assertEqual(1, len(graph.assemblies))
+        self.assertEqual("PARTIAL", graph.completeness)
+
+    def test_build_graph_follows_project_reference_without_trusting_output(self) -> None:
+        (self.root / "Assets/Dependency").mkdir()
+        (self.root / "Assets/Dependency/Dependency.asmdef").write_text(
+            '{"name":"Dependency"}\n', encoding="utf-8"
+        )
+        (self.root / "Assets/Dependency/Dependency.cs").write_text(
+            "class Dependency {}\n", encoding="utf-8"
+        )
+        hint = self.root / "Managed/UnityEngine.CoreModule.dll"
+        (self.root / "Dependency.csproj").write_text(f"""<Project>
+  <PropertyGroup><DefineConstants>UNITY_EDITOR</DefineConstants></PropertyGroup>
+  <ItemGroup>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>{hint}</HintPath></Reference>
+    <Compile Include="Assets/Dependency/**/*.cs" />
+  </ItemGroup>
+</Project>
+""", encoding="utf-8")
+        game_project = (self.root / "Game.csproj").read_text(encoding="utf-8")
+        (self.root / "Game.csproj").write_text(
+            game_project.replace(
+                '<ProjectReference Include="Dependency.csproj" />',
+                '<ProjectReference Include="Dependency.csproj"><Name>Dependency</Name></ProjectReference>',
+            ),
+            encoding="utf-8",
+        )
+        output = self.root / "Library/ScriptAssemblies/Dependency.dll"
+        output.parent.mkdir(parents=True)
+        output.write_bytes(b"unverified generated output")
+
+        graph = UnityContextBuilder(self.root).build_graph("Game")
+
+        self.assertEqual({"Game", "Dependency"}, {
+            item.assembly.name for item in graph.assemblies if item.assembly
+        })
+        self.assertEqual(1, len(graph.dependencies))
+        self.assertEqual("BOUND_UNVERIFIED", graph.dependencies[0].status)
+        game = next(item for item in graph.assemblies if item.assembly.name == "Game")
+        self.assertEqual("PROJECT_UNVERIFIED", game.project_references[0].script_assembly.kind)
+        self.assertEqual("PARTIAL", graph.completeness)
+        validate("unity-assembly-graph.schema.json", graph.to_dict())
+
 
 @unittest.skipUnless(os.environ.get("CHANGE_LENS_UNITY_PROJECT"), "real Unity pilot not configured")
 class RealUnityReadOnlyPilotTests(unittest.TestCase):

@@ -50,7 +50,42 @@
         }
       }
     },
-    "project_references": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "project_references": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "include", "assembly_name", "reference_output_assembly",
+          "output_item_type", "status", "script_assembly"
+        ],
+        "properties": {
+          "include": { "type": "string", "minLength": 1 },
+          "assembly_name": { "type": "string", "minLength": 1 },
+          "reference_output_assembly": { "type": "boolean" },
+          "output_item_type": { "type": ["string", "null"] },
+          "status": {
+            "enum": ["BOUND_UNVERIFIED", "MISSING", "OUTSIDE_UNITY_ROOT", "ANALYZER_ONLY"]
+          },
+          "script_assembly": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["path", "sha256", "kind"],
+                "properties": {
+                  "path": { "type": "string", "minLength": 1 },
+                  "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+                  "kind": { "const": "PROJECT_UNVERIFIED" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
     "source_files": {
       "type": "array",
       "uniqueItems": true,

@@ -17,7 +17,12 @@ internal sealed record UnityContext(
 
 internal sealed record MetadataReferenceInput(string Path, string Sha256, string Kind);
 
-internal sealed record SourceFile(string Path, string Content, string ContentHash);
+internal sealed record SourceFile(
+    string Path,
+    string Content,
+    string ContentHash,
+    string SnapshotContentHash,
+    string SourceEncoding);
 
 internal sealed record AnalyzerOutput(
     string SchemaVersion,

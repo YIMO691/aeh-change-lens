@@ -22,10 +22,13 @@ DLL = ROOT / "worker" / "ChangeLens.Analyzer" / "bin" / "Release" / "net8.0" / "
 
 def source_file(path: Path, logical_path: str) -> dict:
     content = path.read_text(encoding="utf-8")
+    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
     return {
         "path": logical_path,
         "content": content,
-        "content_hash": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        "content_hash": digest,
+        "snapshot_content_hash": digest,
+        "source_encoding": "UTF-8",
     }
 
 
@@ -186,6 +189,8 @@ public sealed class PilotBehaviour : MonoBehaviour
                 "path": "Assets/Pilot/PilotBehaviour.cs",
                 "content": content,
                 "content_hash": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                "snapshot_content_hash": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                "source_encoding": "UTF-8",
             }],
         }
         validate("analyzer-worker-input.schema.json", payload)

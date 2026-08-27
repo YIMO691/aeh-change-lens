@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from aeh_change_lens.snapshot import SnapshotResolver  # noqa: E402
 from aeh_change_lens.snapshot.errors import (  # noqa: E402
     InvalidRepositoryError,
+    SnapshotStaleError,
     UnsafePathError,
 )
 from aeh_change_lens.snapshot.security import (  # noqa: E402
@@ -107,6 +108,17 @@ class SnapshotResolverTests(unittest.TestCase):
         self.repository.write("Assets/A.cs", "class A { public int Value => 3; }\n")
         self.assertFalse(self.resolver.is_current(binding))
         validate_snapshot(binding.to_dict())
+
+    def test_reads_only_bytes_named_by_revision_binding(self) -> None:
+        binding = self.resolver.resolve_revision(self.repository.base, "OLD")
+        content = self.resolver.read_bound_bytes(binding, "Assets/A.cs")
+        self.assertEqual("class A { public int Value => 1; }\n", content.decode("utf-8"))
+
+    def test_direct_bound_worktree_read_rejects_mutated_bytes(self) -> None:
+        binding = self.resolver.resolve_worktree("NEW")
+        self.repository.write("Assets/A.cs", "class A { public int Value => 9; }\n")
+        with self.assertRaisesRegex(SnapshotStaleError, "bound source bytes changed"):
+            self.resolver.read_bound_bytes(binding, "Assets/A.cs")
 
     def test_unselected_file_does_not_change_source_manifest(self) -> None:
         binding = self.resolver.resolve_worktree()

@@ -36,13 +36,15 @@ AEH Change Lens 是一个只读的代码变更解释工具。它把一次 AI 辅
 
 ```powershell
 change-lens snapshot <repository-root> --base <commit> --target WORKTREE --pretty
+change-lens unity-context <unity-project-root> --assembly <name> --graph --pretty
+change-lens roslyn-input <repository-root> <unity-project-root> --assembly <name> --request-id <id>
 ```
 
 该命令只读取 Git 对象和工作树中的受支持源码，输出原/新版本的相对路径、对象 ID、逐文件 SHA-256、清单摘要和 rename 映射；不 checkout、不编译或执行目标项目代码。
 
-Roslyn Worker 的首个纵切已经能从内存源码提取类型、方法、调用、分支、异常、返回、状态写入、生命周期、UnityEvent、序列化引用和动态未知关系。Unity Context Builder 可以读取 `.asmdef`、Unity 版本、生成的 `.csproj`、define、Compile glob 和 metadata reference，并对真实 DLL 做 SHA-256 绑定；ET6/Unity 2020.3 的只读试点已验证真实 Unity 生命周期关系可以达到 `CONFIRMED_STATIC`。
+Roslyn Worker 的首个纵切已经能从内存源码提取类型、方法、调用、分支、异常、返回、状态写入、生命周期、UnityEvent、序列化引用和动态未知关系。Unity Context Builder 可以读取 `.asmdef`、Unity 版本、生成的 `.csproj`、define、Compile glob 和 metadata reference，并对真实 DLL 做 SHA-256 绑定。程序集图会递归跟随 ProjectReference，但 `Library/ScriptAssemblies` 输出在缺少源码快照来源证明时保持 `PROJECT_UNVERIFIED`。`roslyn-input` 只从已绑定的 Git/工作树快照取源码字节，并在装配前后检查 stale；ET6/Unity 2020.3 的只读试点已覆盖 UTF-8、UTF-8 BOM 和 GB18030 历史源码。
 
-`CL-GATE-02` 尚未通过：程序集 ProjectReference 仍需递归装载，Coroutine/async/delegate/event/component 能力和 OLD/NEW Golden Graph 尚未补齐；Viewer 也尚未实现。
+`CL-GATE-02` 尚未通过：`ScriptAssemblies` 输出仍需建立可验证来源，平台/define constraint 适用性、Coroutine/async/delegate/event/component 能力和 OLD/NEW Golden Graph 尚未补齐；Viewer 也尚未实现。
 
 当前 Gate：
 

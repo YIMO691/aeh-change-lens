@@ -16,3 +16,6 @@ class UnsafePathError(SnapshotError):
 class GitReadError(SnapshotError):
     """A read-only Git operation failed."""
 
+
+class SnapshotStaleError(SnapshotError):
+    """Bound bytes no longer match the immutable snapshot manifest."""

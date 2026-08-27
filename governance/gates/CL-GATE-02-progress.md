@@ -14,6 +14,11 @@
 - SHA-256 binding of metadata DLLs and context canonical digest;
 - Worker-side digest verification before `MetadataReference.CreateFromFile`;
 - rejection of missing, changed, non-DLL and reparse-point metadata inputs;
+- recursive ProjectReference assembly graph with explicit dependency status;
+- `Library/ScriptAssemblies` discovery without treating unproven output as trusted metadata;
+- snapshot-only Worker input assembly with pre/post stale checks;
+- separate raw-snapshot and UTF-8 transport digests for legacy source encoding;
+- strict UTF-8, UTF BOM and GB18030 source decoding;
 - confidence upgrade only when a bound `UnityEngine.CoreModule.dll` resolves
   `MonoBehaviour` and `UnityEventBase`;
 - caller-provided source stubs cannot overstate Unity context.
@@ -26,12 +31,26 @@ metadata_references=221
 unity_references=69
 project_references=5
 source_files=632
+assembly_graph_nodes=6
+assembly_graph_edges=12
+selected_snapshot_files=9325
+assembled_source_files=632
+source_encodings=UTF-8:336,UTF-8-BOM:273,GB18030:23
 completeness=PARTIAL
-context_digest=7e9311efb85b9b35a8292d712525124612fa365615792fb1e4ab6f0596852001
+context_digest=30242841ab9333fdf5f5c0e0257959a659f7f1c9f465c9838c7e259fb318655c
+assembly_graph_digest=3bb255e149e693090d7c3fd4865127fd7773890eae44ef025ba0b5d7c9ef1f87
 ```
 
-The five generated `ProjectReference` entries are not yet recursively loaded,
-so the real assembly context correctly remains `PARTIAL`.
+The graph recursively follows the five root `ProjectReference` entries. Four
+corresponding `Library/ScriptAssemblies` outputs exist, but are explicitly
+`BOUND_UNVERIFIED`: their bytes are not accepted by the Worker until source,
+compiler options and output provenance can be bound. The root context and graph
+therefore correctly remain `PARTIAL`.
+
+All 632 `Unity.Model` sources were read through the worktree `SnapshotBinding`.
+Twenty-three legacy GB18030 files were decoded without losing their raw-byte
+snapshot digests; the Worker receives a separate digest for transcoded UTF-8
+text. Snapshot and Unity context are checked both before and after assembly.
 
 A synthetic `PilotBehaviour` compiled only in memory against the digest-bound
 Unity 2020.3 metadata. Its lifecycle and UnityEvent relations were emitted as
@@ -46,11 +65,11 @@ $env:CHANGE_LENS_UNITY_PROJECT='D:\ares\project\ET6\Unity'
 python -m unittest discover -s tests -v
 ```
 
-Result:
+Latest result:
 
 ```text
 Build succeeded: 0 warnings, 0 errors
-Ran 30 tests in 13.952s
+Ran 40 tests in 98.433s
 OK (skipped=1)
 ```
 
@@ -72,8 +91,7 @@ compiled, executed, staged, or cleaned.
 
 ## Remaining before CL-GATE-02
 
-- recursively resolve assembly and ProjectReference boundaries;
-- bind snapshot source bytes into per-assembly Worker inputs;
+- bind verifiable build provenance for generated ScriptAssemblies outputs;
 - evaluate platform and define constraints;
 - add coroutine, async/await, delegate, C# event and component relations;
 - produce and measure OLD/NEW golden graphs against manual annotation;

@@ -5,7 +5,7 @@ import json
 import sys
 from dataclasses import asdict
 
-from .languages.csharp import UnityContextBuilder
+from .languages.csharp import UnityContextBuilder, WorkerInputAssembler
 from .snapshot import SnapshotResolver
 from .snapshot.errors import SnapshotError
 
@@ -24,7 +24,18 @@ def _parser() -> argparse.ArgumentParser:
     unity_context = subcommands.add_parser("unity-context", help="读取 asmdef 与 Unity 生成 csproj 上下文")
     unity_context.add_argument("unity_project", help="Unity 项目根目录")
     unity_context.add_argument("--assembly", required=True, help="Assembly Definition name")
+    unity_context.add_argument("--graph", action="store_true", help="递归输出程序集依赖图")
     unity_context.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
+    roslyn_input = subcommands.add_parser(
+        "roslyn-input", help="从已验哈希源码快照装配 Roslyn Worker 输入"
+    )
+    roslyn_input.add_argument("repository", help="Git 仓库根目录")
+    roslyn_input.add_argument("unity_project", help="仓库内的 Unity 项目根目录")
+    roslyn_input.add_argument("--assembly", required=True, help="Assembly Definition name")
+    roslyn_input.add_argument("--snapshot", default="WORKTREE", help="WORKTREE 或 Git revision")
+    roslyn_input.add_argument("--role", choices=("OLD", "NEW"), default="NEW")
+    roslyn_input.add_argument("--request-id", required=True)
+    roslyn_input.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
     return parser
 
 
@@ -51,7 +62,23 @@ def main(argv: list[str] | None = None) -> int:
         if arguments.command == "snapshot":
             result = _snapshot(arguments)
         elif arguments.command == "unity-context":
-            result = UnityContextBuilder(arguments.unity_project).build(arguments.assembly).to_dict()
+            builder = UnityContextBuilder(arguments.unity_project)
+            result = (
+                builder.build_graph(arguments.assembly).to_dict()
+                if arguments.graph
+                else builder.build(arguments.assembly).to_dict()
+            )
+        elif arguments.command == "roslyn-input":
+            resolver = SnapshotResolver(arguments.repository)
+            binding = (
+                resolver.resolve_worktree(arguments.role)
+                if arguments.snapshot == "WORKTREE"
+                else resolver.resolve_revision(arguments.snapshot, arguments.role)
+            )
+            context = UnityContextBuilder(arguments.unity_project).build(arguments.assembly)
+            result = WorkerInputAssembler(resolver, arguments.unity_project).assemble(
+                binding, context, arguments.request_id
+            ).to_dict()
         else:  # pragma: no cover - argparse prevents this branch
             parser.error(f"unsupported command: {arguments.command}")
     except (SnapshotError, FileNotFoundError, ValueError) as error:

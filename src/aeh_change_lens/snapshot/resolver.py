@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from .errors import GitReadError, InvalidRepositoryError, UnsafePathError
+from .errors import GitReadError, InvalidRepositoryError, SnapshotStaleError, UnsafePathError
 from .models import FileBinding, RenameBinding, RevisionRole, SnapshotBinding
 from .security import assert_safe_repository_root, normalize_repo_relative, secure_worktree_path
 
@@ -209,6 +209,26 @@ class SnapshotResolver:
             current.tree_hash == binding.tree_hash
             and current.source_manifest_hash == binding.source_manifest_hash
         )
+
+    def read_bound_bytes(self, binding: SnapshotBinding, path: str) -> bytes:
+        """Read one manifest entry and revalidate its size and digest."""
+        normalized = normalize_repo_relative(path)
+        matches = [item for item in binding.files if item.path == normalized]
+        if len(matches) != 1:
+            raise SnapshotStaleError(f"path is not uniquely bound by the snapshot: {normalized!r}")
+        file_binding = matches[0]
+        if binding.revision == "WORKTREE":
+            local_path = secure_worktree_path(self.repository_root, normalized)
+            if not local_path.is_file():
+                raise SnapshotStaleError(f"bound worktree file is unavailable: {normalized!r}")
+            content = local_path.read_bytes()
+        else:
+            if not file_binding.git_blob_oid:
+                raise SnapshotStaleError(f"revision file has no bound Git blob: {normalized!r}")
+            content = self._git("cat-file", "blob", file_binding.git_blob_oid)
+        if len(content) != file_binding.byte_size or _sha256(content) != file_binding.sha256:
+            raise SnapshotStaleError(f"bound source bytes changed: {normalized!r}")
+        return content
 
     def _worktree_is_dirty(self) -> bool:
         return bool(self._git("status", "--porcelain=v1", "-z", "--untracked-files=all"))

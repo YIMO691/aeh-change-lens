@@ -2,6 +2,8 @@
 
 from .models import FileBinding, RenameBinding, SnapshotBinding
 from .resolver import SnapshotResolver
+from .errors import SnapshotStaleError
 
-__all__ = ["FileBinding", "RenameBinding", "SnapshotBinding", "SnapshotResolver"]
-
+__all__ = [
+    "FileBinding", "RenameBinding", "SnapshotBinding", "SnapshotResolver", "SnapshotStaleError",
+]
