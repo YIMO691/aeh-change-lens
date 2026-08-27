@@ -1,0 +1,131 @@
+schema_version: 1
+artifact_type: change_lens_governance_plan
+proposal_id: AEH-CHANGE-LENS
+status:
+  plan_verdict: PLAN_READY
+  implementation_authorization: NOT_GRANTED
+  release_decision: NOT_ASSESSED
+
+owner_decisions:
+  - id: CL-DEC-001
+    topic: first_supported_language
+    decision: Python
+  - id: CL-DEC-002
+    topic: delivery_topology
+    decision: separate_repository_and_python_package
+  - id: CL-DEC-003
+    topic: llm_policy
+    decision: deterministic_offline_core_with_explicit_opt_in_llm
+  - id: CL-DEC-004
+    topic: target_users
+    decision: change_authors_and_reviewers
+  - id: CL-DEC-005
+    topic: pilot_corpus
+    decision: 10_to_20_manually_annotated_changes
+  - id: CL-DEC-006
+    topic: language_policy
+    decision:
+      supported: [zh-CN, en]
+      default: zh-CN
+      authoritative_document: docs/IMPLEMENTATION_PLAN.zh-CN.md
+
+scope:
+  first_analyzed_language: Python
+  repository_mode: local_single_git_repository
+  change_mode: one_explicit_aeh_change
+  graph_boundary: changed_symbols_plus_one_bounded_relationship_hop
+  default_network_access: deny
+  project_code_execution_in_static_mvp: deny
+  aeh_normative_truth_mutation: deny
+  llm_explanation: explicit_opt_in_only
+
+confidence_levels:
+  - CONFIRMED_STATIC
+  - OBSERVED_RUNTIME
+  - STRUCTURAL
+  - INFERRED
+  - UNKNOWN
+
+p0_acceptance:
+  - CL-AC-001
+  - CL-AC-002
+  - CL-AC-003
+  - CL-AC-004
+  - CL-AC-005
+  - CL-AC-006
+  - CL-AC-007
+  - CL-AC-008
+  - CL-AC-009
+  - CL-AC-010
+  - CL-AC-011
+
+invariants:
+  - CL-INV-001
+  - CL-INV-002
+  - CL-INV-003
+  - CL-INV-004
+  - CL-INV-005
+  - CL-INV-006
+  - CL-INV-007
+  - CL-INV-008
+  - CL-INV-009
+  - CL-INV-010
+  - CL-INV-011
+
+work_packages:
+  - id: CL-WP-00
+    depends_on: []
+    exit_gate: CL-GATE-00
+  - id: CL-WP-01
+    depends_on: [CL-WP-00]
+    exit_gate: CL-GATE-01
+  - id: CL-WP-02
+    depends_on: [CL-WP-01]
+    exit_gate: CL-GATE-02
+  - id: CL-WP-03
+    depends_on: [CL-WP-02]
+    exit_gate: CL-GATE-03
+  - id: CL-WP-04
+    depends_on: [CL-WP-03]
+    exit_gate: CL-GATE-04
+  - id: CL-WP-05
+    depends_on: [CL-WP-04]
+    exit_gate: CL-GATE-05
+  - id: CL-WP-06
+    depends_on: [CL-WP-05]
+    exit_gate: CL-GATE-06
+  - id: CL-WP-07
+    depends_on: [CL-WP-06]
+    exit_gate: CL-GATE-07
+
+risks:
+  - CL-RISK-001
+  - CL-RISK-002
+  - CL-RISK-003
+  - CL-RISK-004
+  - CL-RISK-005
+  - CL-RISK-006
+  - CL-RISK-007
+  - CL-RISK-008
+  - CL-RISK-009
+  - CL-RISK-010
+
+drift_control:
+  one_primary_work_package_per_pr: true
+  governed_ids_required_in_pr: true
+  raw_exit_gate_evidence_required: true
+  synchronized_governance_files:
+    - docs/IMPLEMENTATION_PLAN.zh-CN.md
+    - docs/IMPLEMENTATION_PLAN.en.md
+    - governance/proposal.yaml
+  owner_decision_required_for:
+    - goal_or_target_user
+    - scope_boundary
+    - authority_or_mutation_boundary
+    - confidence_semantics
+    - p0_acceptance_or_invariants
+    - work_package_dependency_order
+    - offline_or_privacy_default
+    - first_language_or_delivery_topology
+
+implementation_start_condition: explicit_owner_authorization
