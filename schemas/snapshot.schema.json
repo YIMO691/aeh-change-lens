@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeh-change-lens.dev/schemas/snapshot.schema.json",
+  "title": "AEH Change Lens source snapshot binding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "role",
+    "revision",
+    "commit_oid",
+    "tree_oid",
+    "tree_hash",
+    "source_manifest_hash",
+    "dirty",
+    "files"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "role": { "enum": ["OLD", "NEW"] },
+    "revision": { "type": "string", "minLength": 1 },
+    "commit_oid": {
+      "oneOf": [
+        { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+        { "type": "null" }
+      ]
+    },
+    "tree_oid": {
+      "oneOf": [
+        { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+        { "type": "null" }
+      ]
+    },
+    "tree_hash": { "$ref": "common.schema.json#/$defs/sha256" },
+    "source_manifest_hash": { "$ref": "common.schema.json#/$defs/sha256" },
+    "dirty": { "type": "boolean" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "byte_size", "sha256", "git_blob_oid"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+          },
+          "byte_size": { "type": "integer", "minimum": 0 },
+          "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+          "git_blob_oid": {
+            "oneOf": [
+              { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+              { "type": "null" }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "revision": { "const": "WORKTREE" } } },
+      "then": {
+        "properties": {
+          "commit_oid": { "type": "null" },
+          "tree_oid": { "type": "null" }
+        }
+      }
+    }
+  ]
+}
+

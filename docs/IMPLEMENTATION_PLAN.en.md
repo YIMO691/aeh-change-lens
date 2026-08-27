@@ -1,7 +1,7 @@
 # AEH Change Lens Implementation Plan
 
 > Language: English translation; the Chinese plan is authoritative.
-> Status: `PLAN_READY / IMPLEMENTATION_AUTHORIZATION_GRANTED / CL-GATE-00_PASSED / CL-WP-01_READY`
+> Status: `PLAN_READY / IMPLEMENTATION_AUTHORIZATION_GRANTED / CL-GATE-00_PASSED / CL-WP-01_IN_PROGRESS`
 > Canonical Chinese plan: [IMPLEMENTATION_PLAN.zh-CN.md](IMPLEMENTATION_PLAN.zh-CN.md)
 > Machine contract: [proposal.yaml](../governance/proposal.yaml)
 
@@ -95,7 +95,7 @@ An Owner decision is required before changing the target user, scope, mutation a
 PLAN_READY
 IMPLEMENTATION_AUTHORIZATION_GRANTED
 CL-GATE-00_PASSED
-CL-WP-01_READY
+CL-WP-01_IN_PROGRESS
 RELEASE_NOT_ASSESSED
 ```
 
