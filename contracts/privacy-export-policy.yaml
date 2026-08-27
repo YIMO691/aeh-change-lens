@@ -1,0 +1,49 @@
+schema_version: 1
+policy_id: CL-PRIVACY-DEFAULT
+default_mode: offline
+
+network:
+  default: DENY
+  telemetry: DENY
+  update_checks: DENY
+  llm_adapter: EXPLICIT_OPT_IN
+
+execution:
+  target_project_code: DENY
+  unity_editor: DENY
+  build_scripts: DENY
+  analyzer_processes:
+    - python_orchestrator
+    - dotnet_roslyn_worker
+
+filesystem:
+  checkout_mutation: DENY
+  aeh_normative_truth_write: DENY
+  follow_symlinks_or_reparse_points: DENY
+  allowed_reads:
+    - explicit_repository_root
+    - explicit_aeh_artifact_root
+    - installed_dotnet_and_unity_reference_metadata
+
+export_profiles:
+  METADATA_ONLY:
+    source_text: DENY
+    source_paths: RELATIVE_ONLY
+    symbols: ALLOW
+    digests: ALLOW
+  BOUNDED_SNIPPETS:
+    source_text: EXPLICIT_OPT_IN
+    max_context_lines_per_location: 5
+    source_paths: RELATIVE_ONLY
+    secrets_scan_required: true
+  LOCAL_FULL_SOURCE:
+    source_text: LOCAL_ONLY_EXPLICIT_OPT_IN
+    remote_upload: DENY
+    secrets_scan_required: true
+
+failure_policy:
+  path_escape: FAIL_CLOSED
+  missing_context: PARTIAL_WITH_LIMITATION
+  stale_input: STALE_NO_REUSE
+  unsupported_dynamic_target: UNKNOWN
+

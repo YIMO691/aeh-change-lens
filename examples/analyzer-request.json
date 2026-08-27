@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0.0",
+  "request_id": "REQ-UNITY-MINIMAL-001",
+  "old_snapshot": {
+    "role": "OLD",
+    "revision": "fixture-base",
+    "tree_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "source_manifest_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "dirty": false
+  },
+  "new_snapshot": {
+    "role": "NEW",
+    "revision": "fixture-target",
+    "tree_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+    "source_manifest_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+    "dirty": false
+  },
+  "scope": {
+    "changed_paths": [
+      "Assets/Scripts/Gameplay/RewardController.cs",
+      "Assets/Scripts/Gameplay/RewardPolicy.cs"
+    ],
+    "changed_symbols": ["ChangeLens.Fixture.RewardController"],
+    "relationship_hops": 1
+  },
+  "unity_context": {
+    "completeness": "COMPLETE",
+    "assembly_definitions": ["Assets/Scripts/Gameplay/ChangeLens.Gameplay.asmdef"],
+    "defines": ["UNITY_2022_3_OR_NEWER"],
+    "references": ["UnityEngine.CoreModule", "UnityEngine.UnityEventModule"],
+    "unity_version": "2022.3.62f1",
+    "limitations": []
+  },
+  "policy": {
+    "network_access": "DENY",
+    "execute_project_code": false,
+    "follow_symlinks": false,
+    "source_disclosure": "METADATA_ONLY"
+  }
+}
+

@@ -1,0 +1,102 @@
+schema_version: 1
+catalog_id: change-lens-csharp-unity-relations
+
+global_rules:
+  - id: CL-REL-RULE-001
+    statement: A relationship is emitted separately for OLD and NEW revisions.
+  - id: CL-REL-RULE-002
+    statement: CONFIRMED_STATIC requires a resolved Roslyn symbol or an explicit Unity framework rule over resolved symbols.
+  - id: CL-REL-RULE-003
+    statement: Unity framework scheduling is never represented as DIRECT_CALL.
+  - id: CL-REL-RULE-004
+    statement: Dynamic or Inspector-only targets remain UNKNOWN unless stronger authorized evidence exists.
+  - id: CL-REL-RULE-005
+    statement: Missing assembly definitions, defines, or references forces PARTIAL analysis and a disclosed limitation.
+
+relations:
+  DIRECT_CALL:
+    label_zh: 直接调用
+    category: code
+    allowed_confidence: [CONFIRMED_STATIC, STRUCTURAL, UNKNOWN]
+    confirmed_requirement: Roslyn invocation target resolves to a unique method symbol.
+  FRAMEWORK_LIFECYCLE:
+    label_zh: Unity 生命周期调度
+    category: unity_framework
+    allowed_confidence: [CONFIRMED_STATIC, STRUCTURAL, UNKNOWN]
+    confirmed_requirement: Resolved MonoBehaviour subtype and a recognized Unity event-function signature.
+  STARTS_COROUTINE:
+    label_zh: 启动协程
+    category: unity_framework
+    allowed_confidence: [CONFIRMED_STATIC, STRUCTURAL, UNKNOWN]
+    confirmed_requirement: StartCoroutine invocation and coroutine target resolve through Roslyn.
+  YIELDS_TO:
+    label_zh: 协程让出
+    category: control_flow
+    allowed_confidence: [STRUCTURAL, UNKNOWN]
+    confirmed_requirement: Not available in the static MVP.
+  AWAITS:
+    label_zh: 异步等待
+    category: control_flow
+    allowed_confidence: [CONFIRMED_STATIC, STRUCTURAL, UNKNOWN]
+    confirmed_requirement: Awaited expression type and target resolve through Roslyn.
+  SUBSCRIBES_EVENT:
+    label_zh: 订阅事件
+    category: event
+    allowed_confidence: [CONFIRMED_STATIC, STRUCTURAL, UNKNOWN]
+    confirmed_requirement: Event symbol and handler symbol both resolve through Roslyn.
+  PUBLISHES_EVENT:
+    label_zh: 发布事件
+    category: event
+    allowed_confidence: [CONFIRMED_STATIC, STRUCTURAL, UNKNOWN]
+    confirmed_requirement: Invoked C# event symbol resolves through Roslyn.
+  INVOKES_UNITY_EVENT:
+    label_zh: 触发 UnityEvent
+    category: unity_framework
+    allowed_confidence: [CONFIRMED_STATIC, STRUCTURAL, UNKNOWN]
+    confirmed_requirement: UnityEvent field and Invoke method resolve through Roslyn.
+  INSPECTOR_BINDING_UNKNOWN:
+    label_zh: Inspector 绑定目标未知
+    category: dynamic
+    allowed_confidence: [UNKNOWN, OBSERVED_RUNTIME]
+    confirmed_requirement: Never CONFIRMED_STATIC from C# source alone.
+  BRANCHES_TO:
+    label_zh: 条件分支
+    category: control_flow
+    allowed_confidence: [STRUCTURAL, CONFIRMED_STATIC]
+    confirmed_requirement: Branch syntax is parsed; semantic resolution is optional.
+  RETURNS_FROM:
+    label_zh: 返回
+    category: control_flow
+    allowed_confidence: [STRUCTURAL, CONFIRMED_STATIC]
+    confirmed_requirement: Return syntax is parsed.
+  THROWS_FROM:
+    label_zh: 抛出异常
+    category: control_flow
+    allowed_confidence: [STRUCTURAL, CONFIRMED_STATIC]
+    confirmed_requirement: Throw syntax is parsed.
+  READS_STATE:
+    label_zh: 读取状态
+    category: data_flow
+    allowed_confidence: [CONFIRMED_STATIC, STRUCTURAL, UNKNOWN]
+    confirmed_requirement: Referenced state symbol resolves through Roslyn.
+  WRITES_STATE:
+    label_zh: 写入状态
+    category: side_effect
+    allowed_confidence: [CONFIRMED_STATIC, STRUCTURAL, UNKNOWN]
+    confirmed_requirement: Assignment or mutating target symbol resolves through Roslyn.
+  SERIALIZED_REFERENCE:
+    label_zh: Unity 序列化引用
+    category: unity_framework
+    allowed_confidence: [CONFIRMED_STATIC, STRUCTURAL, UNKNOWN]
+    confirmed_requirement: Serialized field symbol and referenced type resolve; concrete Inspector object remains unknown.
+  COMPONENT_LOOKUP:
+    label_zh: 组件查找
+    category: unity_framework
+    allowed_confidence: [CONFIRMED_STATIC, STRUCTURAL, UNKNOWN]
+    confirmed_requirement: Generic or typeof component target resolves through Roslyn.
+  DYNAMIC_DISPATCH_UNKNOWN:
+    label_zh: 动态分发目标未知
+    category: dynamic
+    allowed_confidence: [UNKNOWN, OBSERVED_RUNTIME]
+    confirmed_requirement: Never CONFIRMED_STATIC without an authorized observation identifying the target.
+

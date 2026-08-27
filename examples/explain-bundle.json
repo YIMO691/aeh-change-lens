@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0.0",
+  "bundle_id": "BUNDLE-UNITY-MINIMAL-001",
+  "status": "FRESH",
+  "language": "zh-CN",
+  "revisions": {
+    "old": {
+      "role": "OLD",
+      "revision": "fixture-base",
+      "tree_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "source_manifest_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "dirty": false
+    },
+    "new": {
+      "role": "NEW",
+      "revision": "fixture-target",
+      "tree_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "source_manifest_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "dirty": false
+    }
+  },
+  "analysis": {
+    "analyzer": "contract-fixture",
+    "analyzer_version": "0.1.0.dev0",
+    "config_hash": "4444444444444444444444444444444444444444444444444444444444444444",
+    "generated_at": "2026-08-27T00:00:00Z",
+    "relationship_hops": 1,
+    "unity_context": "COMPLETE",
+    "aeh_artifact_manifest_hash": null
+  },
+  "nodes": [
+    {
+      "node_id": "old:RewardController.Claim(int)",
+      "revision": "OLD",
+      "kind": "METHOD",
+      "change": "UPDATED",
+      "label": "Claim",
+      "location": {
+        "revision_role": "OLD",
+        "path": "Assets/Scripts/Gameplay/RewardController.cs",
+        "start_line": 17,
+        "end_line": 29,
+        "content_hash": "5555555555555555555555555555555555555555555555555555555555555555"
+      },
+      "provenance": {
+        "origin": "fixture_annotation",
+        "confidence": "STRUCTURAL",
+        "source_ids": ["UNITY-MINIMAL-001"]
+      },
+      "evidence_refs": []
+    },
+    {
+      "node_id": "new:RewardController.TryClaim(int)",
+      "revision": "NEW",
+      "kind": "METHOD",
+      "change": "UPDATED",
+      "label": "TryClaim",
+      "location": {
+        "revision_role": "NEW",
+        "path": "Assets/Scripts/Gameplay/RewardController.cs",
+        "start_line": 18,
+        "end_line": 36,
+        "content_hash": "6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      "provenance": {
+        "origin": "fixture_annotation",
+        "confidence": "STRUCTURAL",
+        "source_ids": ["UNITY-MINIMAL-001"]
+      },
+      "evidence_refs": ["CODE-FX-001"]
+    }
+  ],
+  "edges": [],
+  "mappings": [
+    {
+      "mapping_id": "map:Claim:TryClaim",
+      "old_node_id": "old:RewardController.Claim(int)",
+      "new_node_id": "new:RewardController.TryClaim(int)",
+      "kind": "RENAMED",
+      "confidence": "STRUCTURAL",
+      "basis": ["human_fixture_annotation", "body_similarity"],
+      "alternatives": []
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "CODE-FX-001",
+      "kind": "CODE",
+      "authority": "SOURCE_BOUND",
+      "digest": "7777777777777777777777777777777777777777777777777777777777777777",
+      "label": "RewardController fixture delta",
+      "uri": null
+    }
+  ],
+  "explanations": [
+    {
+      "explanation_id": "explain:claim-renamed",
+      "statement_zh": "领取入口由 Claim 改为 TryClaim，并新增了可观察的失败返回。",
+      "classification": "SUPPORTED",
+      "subject_refs": ["map:Claim:TryClaim"],
+      "evidence_refs": ["CODE-FX-001"]
+    }
+  ],
+  "limitations": ["这是契约示例，不代表 Roslyn 分析结果。"],
+  "canonical_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+}
+

@@ -1,7 +1,7 @@
 # AEH Change Lens
 
-> 状态：方案已冻结，尚未授权开始实现。
-> Status: plan frozen; implementation has not been authorized.
+> 状态：已授权实施；`CL-GATE-00` 已通过，`CL-WP-01` 可以开始。
+> Status: implementation authorized; `CL-GATE-00` passed and `CL-WP-01` is ready.
 
 ## 中文
 
@@ -36,7 +36,9 @@ AEH Change Lens 是一个只读的代码变更解释工具。它把一次 AI 辅
 
 ```text
 PLAN_READY
-IMPLEMENTATION_AUTHORIZATION_NOT_GRANTED
+IMPLEMENTATION_AUTHORIZATION_GRANTED
+CL-GATE-00_PASSED
+CL-WP-01_READY
 RELEASE_NOT_ASSESSED
 ```
 
@@ -57,7 +59,8 @@ Confirmed defaults for the first version:
 - a pilot corpus of 10–20 manually annotated Changes;
 - no mutation of AEH Gates, approvals, or normative machine truth.
 
-This repository currently contains a plan, not an implementation or release claim.
+Implementation was explicitly authorized on 2026-08-27. Work proceeds one governed
+work package at a time; no release claim has been made.
 
 ## License
 

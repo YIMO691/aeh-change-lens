@@ -1,0 +1,68 @@
+schema_version: 1
+fixture_id: UNITY-MINIMAL-001
+annotation_status: HUMAN_REVIEWED_CONTRACT_FIXTURE
+execution_allowed: false
+
+coverage:
+  - ADDED
+  - REMOVED
+  - UPDATED
+  - MOVED
+  - RENAMED
+  - BRANCH
+  - EXCEPTION
+  - SIDE_EFFECT
+  - DYNAMIC_CALL
+  - UNITY_LIFECYCLE
+  - UNITY_EVENT
+  - SERIALIZED_REFERENCE
+  - STALE
+
+expected_changes:
+  - id: FX-CHANGE-001
+    kind: RENAMED
+    old_symbol: ChangeLens.Fixture.RewardController.Claim(int)
+    new_symbol: ChangeLens.Fixture.RewardController.TryClaim(int)
+    note: Return type and control flow are also updated.
+  - id: FX-CHANGE-002
+    kind: MOVED
+    old_symbol: ChangeLens.Fixture.RewardController.CalculateBonus(int)
+    new_symbol: ChangeLens.Fixture.RewardPolicy.CalculateBonus(int)
+    note: The semantic differ must retain an explicit mapping basis.
+  - id: FX-CHANGE-003
+    kind: REMOVED
+    old_symbol: ChangeLens.Fixture.RewardController.LegacyAudit(int)
+  - id: FX-CHANGE-004
+    kind: ADDED
+    new_symbol: ChangeLens.Fixture.RewardPolicy
+  - id: FX-CHANGE-005
+    kind: UPDATED
+    old_symbol: ChangeLens.Fixture.RewardController.Start()
+    new_symbol: ChangeLens.Fixture.RewardController.Awake()
+    note: Both are Unity framework-scheduled lifecycle functions, not direct callers.
+
+expected_relations:
+  - relation: FRAMEWORK_LIFECYCLE
+    target: ChangeLens.Fixture.RewardController.Awake()
+    forbidden_relation: DIRECT_CALL
+  - relation: WRITES_STATE
+    source: ChangeLens.Fixture.RewardController.TryClaim(int)
+    target: ChangeLens.Fixture.Wallet.Credit(int)
+  - relation: INVOKES_UNITY_EVENT
+    source: ChangeLens.Fixture.RewardController.TryClaim(int)
+    target: ChangeLens.Fixture.RewardController.claimed
+  - relation: SERIALIZED_REFERENCE
+    source: ChangeLens.Fixture.RewardController
+    target: ChangeLens.Fixture.RewardPolicy
+  - relation: DYNAMIC_DISPATCH_UNKNOWN
+    source: ChangeLens.Fixture.RewardController.TryClaim(int)
+    target: RefreshHud
+    required_confidence: UNKNOWN
+
+required_partial_cases:
+  - missing_asmdef
+  - missing_define_set
+  - missing_unity_references
+  - unresolved_send_message_target
+  - inspector_unity_event_binding
+

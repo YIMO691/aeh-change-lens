@@ -1,0 +1,35 @@
+schema_version: 1
+authoritative_locale: zh-CN
+semantic_source: explain_bundle
+terms:
+  OLD:
+    zh-CN: 原链路
+    en: Old path
+  NEW:
+    zh-CN: 新链路
+    en: New path
+  CONFIRMED_STATIC:
+    zh-CN: 静态确认
+    en: Confirmed static
+  OBSERVED_RUNTIME:
+    zh-CN: 运行时观测
+    en: Observed runtime
+  STRUCTURAL:
+    zh-CN: 结构确认
+    en: Structural
+  INFERRED:
+    zh-CN: 推断
+    en: Inferred
+  UNKNOWN:
+    zh-CN: 未知
+    en: Unknown
+  UNLINKED:
+    zh-CN: 未关联依据
+    en: Unlinked
+  STALE:
+    zh-CN: 已过期
+    en: Stale
+  PARTIAL:
+    zh-CN: 部分结果
+    en: Partial
+

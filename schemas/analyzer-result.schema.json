@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeh-change-lens.dev/schemas/analyzer-result.schema.json",
+  "title": "C#/Unity analyzer result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "status",
+    "capabilities",
+    "nodes",
+    "edges",
+    "diagnostics"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["COMPLETE", "PARTIAL", "FAILED"] },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["syntax", "semantic_model", "unity_context"],
+      "properties": {
+        "syntax": { "type": "boolean" },
+        "semantic_model": { "type": "boolean" },
+        "unity_context": { "enum": ["COMPLETE", "PARTIAL", "MISSING"] }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "explain-bundle.schema.json#/$defs/graph_node" }
+    },
+    "edges": {
+      "type": "array",
+      "items": { "$ref": "explain-bundle.schema.json#/$defs/graph_edge" }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "severity", "message_zh"],
+        "properties": {
+          "code": { "type": "string", "minLength": 1 },
+          "severity": { "enum": ["INFO", "WARNING", "ERROR"] },
+          "message_zh": { "type": "string", "minLength": 1 },
+          "source_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 },
+            "default": []
+          }
+        }
+      }
+    }
+  }
+}

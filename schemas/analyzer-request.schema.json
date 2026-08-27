@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeh-change-lens.dev/schemas/analyzer-request.schema.json",
+  "title": "C#/Unity analyzer request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "old_snapshot",
+    "new_snapshot",
+    "scope",
+    "unity_context",
+    "policy"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "old_snapshot": { "$ref": "common.schema.json#/$defs/revision_binding" },
+    "new_snapshot": { "$ref": "common.schema.json#/$defs/revision_binding" },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed_paths", "relationship_hops"],
+      "properties": {
+        "changed_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+          }
+        },
+        "changed_symbols": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        },
+        "relationship_hops": { "type": "integer", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "unity_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "completeness",
+        "assembly_definitions",
+        "defines",
+        "references",
+        "unity_version"
+      ],
+      "properties": {
+        "completeness": { "enum": ["COMPLETE", "PARTIAL", "MISSING"] },
+        "assembly_definitions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "defines": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "references": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "unity_version": { "type": ["string", "null"] },
+        "limitations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "network_access",
+        "execute_project_code",
+        "follow_symlinks",
+        "source_disclosure"
+      ],
+      "properties": {
+        "network_access": { "const": "DENY" },
+        "execute_project_code": { "const": false },
+        "follow_symlinks": { "const": false },
+        "source_disclosure": { "enum": ["METADATA_ONLY", "BOUNDED_SNIPPETS", "LOCAL_FULL_SOURCE"] }
+      }
+    }
+  }
+}
+

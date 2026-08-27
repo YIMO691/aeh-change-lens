@@ -1,0 +1,54 @@
+schema_version: 1
+oracle_set: CL-P0-ORACLES
+rule: Every governed P0 acceptance criterion has at least one falsifiable oracle before implementation proceeds beyond CL-WP-00.
+
+oracles:
+  CL-AC-001:
+    level: contract_and_integration
+    oracle: Two runs over byte-identical bound inputs and tool configuration produce byte-identical canonical semantic content and digest.
+    planned_evidence: tests/contract now; deterministic repeat test in CL-WP-04.
+  CL-AC-002:
+    level: integration
+    oracle: Mutating any bound source, revision, AEH artifact, analyzer version, or config digest makes an existing bundle STALE before it can be displayed as current.
+    planned_evidence: stale fixture now; mutation matrix in CL-WP-01 and CL-WP-04.
+  CL-AC-003:
+    level: contract_and_golden
+    oracle: Every OLD node has an OLD location and every NEW node has a NEW location; swapped roles fail contract validation.
+    planned_evidence: tests/contract/test_contracts.py and golden graph tests in CL-WP-03.
+  CL-AC-004:
+    level: contract
+    oracle: Removing provenance or confidence from a material node or edge makes the bundle invalid; supported explanations require evidence references.
+    planned_evidence: tests/contract/test_contracts.py.
+  CL-AC-005:
+    level: security_and_integration
+    oracle: Static analysis leaves a digest manifest of all AEH protected files unchanged and exposes no API that writes approval or Gate state.
+    planned_evidence: policy contract now; protected-file before/after test in CL-WP-04.
+  CL-AC-006:
+    level: content_and_security
+    oracle: Product strings and generated artifacts contain no claim to reveal hidden chain of thought; rationale is labeled by external evidence class.
+    planned_evidence: repository terminology scan now; explanation adversarial tests in CL-WP-05.
+  CL-AC-007:
+    level: contract_and_performance
+    oracle: Analyzer requests reject relationship_hops greater than one and default output contains only changed symbols plus the configured bounded hop.
+    planned_evidence: tests/contract/test_contracts.py and graph-bound test in CL-WP-02.
+  CL-AC-008:
+    level: contract_and_golden
+    oracle: Every material explanation is SUPPORTED with at least one evidence ID, or is visibly classified INFERRED or UNLINKED.
+    planned_evidence: schema conditional now; evidence-link tests in CL-WP-04 and CL-WP-05.
+  CL-AC-009:
+    level: adversarial
+    oracle: Missing, invalid, escaped, unsupported, ambiguous, or unresolved inputs return FAILED, PARTIAL, UNKNOWN, or STALE and never silently return a complete-confidence path.
+    planned_evidence: fixture coverage manifest now; adversarial matrix in CL-WP-01 through CL-WP-05.
+  CL-AC-010:
+    level: measured_pilot
+    oracle: For 10–20 annotated changes, reviewers can answer all five product questions; task success and time are reported against the agreed baseline before CONTINUE.
+    planned_evidence: protocol and collected pilot results in CL-WP-07.
+  CL-AC-011:
+    level: contract_and_ui
+    oracle: Launch UI defaults to zh-CN; English presentation, when added, renders the same semantic Bundle IDs and cannot modify facts.
+    planned_evidence: terminology contract now; locale parity and UI tests in CL-WP-06.
+  CL-AC-012:
+    level: golden_and_adversarial
+    oracle: Missing asmdef, define, Unity reference, or project context forces PARTIAL or UNKNOWN; lifecycle edges use FRAMEWORK_LIFECYCLE rather than DIRECT_CALL.
+    planned_evidence: relation and fixture contracts now; Roslyn golden tests in CL-WP-02.
+

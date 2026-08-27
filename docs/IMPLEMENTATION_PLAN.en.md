@@ -1,7 +1,7 @@
 # AEH Change Lens Implementation Plan
 
 > Language: English translation; the Chinese plan is authoritative.
-> Status: `PLAN_READY / IMPLEMENTATION_AUTHORIZATION_NOT_GRANTED`
+> Status: `PLAN_READY / IMPLEMENTATION_AUTHORIZATION_GRANTED / CL-GATE-00_PASSED / CL-WP-01_READY`
 > Canonical Chinese plan: [IMPLEMENTATION_PLAN.zh-CN.md](IMPLEMENTATION_PLAN.zh-CN.md)
 > Machine contract: [proposal.yaml](../governance/proposal.yaml)
 
@@ -22,7 +22,7 @@ The product explains externally recorded rationale. It never claims to expose or
 | CL-DEC-005 | Pilot with 10–20 manually annotated Changes |
 | CL-DEC-006 | Chinese launch product/UI; Chinese plan authoritative, English plan retained |
 
-These decisions make the plan executable. They do not authorize implementation or release.
+These decisions make the plan executable. The Owner explicitly authorized implementation on 2026-08-27; release remains subject to a separate Gate.
 
 ## 3. MVP boundary
 
@@ -93,8 +93,12 @@ An Owner decision is required before changing the target user, scope, mutation a
 
 ```text
 PLAN_READY
-IMPLEMENTATION_AUTHORIZATION_NOT_GRANTED
+IMPLEMENTATION_AUTHORIZATION_GRANTED
+CL-GATE-00_PASSED
+CL-WP-01_READY
 RELEASE_NOT_ASSESSED
 ```
 
-Implementation may enter `CL-WP-00` only after explicit Owner authorization. Such authorization does not automatically permit project-code execution, source upload, unsandboxed tests, or AEH repository mutation.
+The Owner explicitly authorized entry into `CL-WP-00` with the instruction “开始实施” on 2026-08-27. This authorization does not automatically permit target-project execution, analyzed-source upload, unsandboxed tests, or AEH repository mutation.
+
+Raw `CL-GATE-00` verification evidence is recorded in [CL-GATE-00.md](../governance/gates/CL-GATE-00.md).

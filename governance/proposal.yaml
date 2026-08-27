@@ -3,7 +3,12 @@ artifact_type: change_lens_governance_plan
 proposal_id: AEH-CHANGE-LENS
 status:
   plan_verdict: PLAN_READY
-  implementation_authorization: NOT_GRANTED
+  implementation_authorization: GRANTED
+  implementation_authorized_on: 2026-08-27
+  active_work_package: CL-WP-00
+  active_gate: CL-GATE-00
+  active_gate_status: PASSED
+  next_work_package: CL-WP-01
   release_decision: NOT_ASSESSED
 
 owner_decisions:
@@ -85,9 +90,11 @@ work_packages:
   - id: CL-WP-00
     depends_on: []
     exit_gate: CL-GATE-00
+    status: GATE_PASSED
   - id: CL-WP-01
     depends_on: [CL-WP-00]
     exit_gate: CL-GATE-01
+    status: READY
   - id: CL-WP-02
     depends_on: [CL-WP-01]
     exit_gate: CL-GATE-02
@@ -140,3 +147,7 @@ drift_control:
     - first_language_or_delivery_topology
 
 implementation_start_condition: explicit_owner_authorization
+implementation_authorization_evidence:
+  source: owner_chat_instruction
+  statement: "开始实施"
+  recorded_on: 2026-08-27
