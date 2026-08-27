@@ -31,6 +31,10 @@
 - confidence upgrade only when a bound `UnityEngine.CoreModule.dll` resolves
   `MonoBehaviour` and `UnityEventBase`;
 - caller-provided source stubs cannot overstate Unity context.
+- deterministic OLD/NEW graph differ with schema and canonical digest;
+- stable symbol mapping, unique structural mapping and explicit reviewed mapping hints;
+- fail-closed mixed-revision/dangling-edge checks and no-guess ambiguous groups;
+- first real-Worker Golden Change compared against human annotation.
 
 ## ET6 read-only measurements
 
@@ -109,7 +113,7 @@ Latest result:
 
 ```text
 Build succeeded: 0 warnings, 0 errors
-Ran 50 tests in 110.994s
+Ran 56 tests in 100.712s
 OK (skipped=1)
 ```
 
@@ -129,10 +133,39 @@ sha256=7c47c6fd1bce7f21375a4c965e6bcbb92ae937e765b84b30ea6af25432389228
 The count and digest are identical. No ET6 file was written, checked out,
 compiled, executed, staged, or cleaned.
 
+## OLD/NEW Golden measurement
+
+The existing `UNITY-MINIMAL-001` human-reviewed fixture now runs through the
+real Roslyn Worker for both lanes in memory. The deterministic projection is:
+
+```text
+old_status=PARTIAL
+new_status=PARTIAL
+old_nodes=19
+new_nodes=25
+mapped_nodes=11
+added_nodes=14
+removed_nodes=8
+updated_node_pairs=4
+moved_node_pairs=1
+added_edges=14
+removed_edges=8
+unchanged_edge_pairs=8
+ambiguous_groups=2
+canonical_digest=e3d40c21b0026a0e47f0ffc8d921d4350e3c4afcd3d9f98a44f71db575454155
+```
+
+The reviewed mappings cover `Claim -> TryClaim`, `CalculateBonus` moving to
+`RewardPolicy`, and `Start -> Awake`. They remain `STRUCTURAL`, not falsely
+promoted to Roslyn-confirmed identity. Two duplicate state-access signatures
+remain unmapped and explicitly limited.
+
 ## Remaining before CL-GATE-02
 
 - bind verifiable build provenance for generated ScriptAssemblies outputs;
 - cover additional platform aliases and non-registry package-version forms;
 - add alias-aware state flow, event removal and Inspector bindings;
-- produce and measure OLD/NEW golden graphs against manual annotation;
+- expand from 1 Golden Change to the planned 10–20 cases;
+- bind separate Unity generated contexts for historical Git revisions and expose
+  an end-to-end two-snapshot analysis command;
 - run performance and adversarial matrices.

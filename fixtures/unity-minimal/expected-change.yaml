@@ -45,9 +45,12 @@ expected_relations:
   - relation: FRAMEWORK_LIFECYCLE
     target: ChangeLens.Fixture.RewardController.Awake()
     forbidden_relation: DIRECT_CALL
-  - relation: WRITES_STATE
+  - relation: DIRECT_CALL
     source: ChangeLens.Fixture.RewardController.TryClaim(int)
     target: ChangeLens.Fixture.Wallet.Credit(int)
+  - relation: WRITES_STATE
+    source: ChangeLens.Fixture.Wallet.Credit(int)
+    target: ChangeLens.Fixture.Wallet.Balance
   - relation: INVOKES_UNITY_EVENT
     source: ChangeLens.Fixture.RewardController.TryClaim(int)
     target: ChangeLens.Fixture.RewardController.claimed
@@ -65,4 +68,3 @@ required_partial_cases:
   - missing_unity_references
   - unresolved_send_message_target
   - inspector_unity_event_binding
-

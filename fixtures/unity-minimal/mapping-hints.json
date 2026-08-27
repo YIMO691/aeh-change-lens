@@ -1,0 +1,20 @@
+[
+  {
+    "old_label": "ChangeLens.Fixture.RewardController.Claim(int)",
+    "new_label": "ChangeLens.Fixture.RewardController.TryClaim(int)",
+    "kind": "RENAMED",
+    "basis": ["human_fixture_annotation", "FX-CHANGE-001"]
+  },
+  {
+    "old_label": "ChangeLens.Fixture.RewardController.CalculateBonus(int)",
+    "new_label": "ChangeLens.Fixture.RewardPolicy.CalculateBonus(int)",
+    "kind": "MOVED",
+    "basis": ["human_fixture_annotation", "FX-CHANGE-002"]
+  },
+  {
+    "old_label": "ChangeLens.Fixture.RewardController.Start()",
+    "new_label": "ChangeLens.Fixture.RewardController.Awake()",
+    "kind": "HEURISTIC",
+    "basis": ["human_fixture_annotation", "FX-CHANGE-005"]
+  }
+]

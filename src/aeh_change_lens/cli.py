@@ -5,7 +5,12 @@ import json
 import sys
 from dataclasses import asdict
 
-from .languages.csharp import UnityContextBuilder, WorkerInputAssembler
+from .languages.csharp import (
+    AnalyzerGraphDiffer,
+    MappingHint,
+    UnityContextBuilder,
+    WorkerInputAssembler,
+)
 from .snapshot import SnapshotResolver
 from .snapshot.errors import SnapshotError
 
@@ -36,6 +41,14 @@ def _parser() -> argparse.ArgumentParser:
     roslyn_input.add_argument("--role", choices=("OLD", "NEW"), default="NEW")
     roslyn_input.add_argument("--request-id", required=True)
     roslyn_input.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
+    graph_diff = subcommands.add_parser(
+        "graph-diff", help="比较 OLD/NEW Roslyn 结果并输出确定性链路差异"
+    )
+    graph_diff.add_argument("old_result", help="OLD analyzer-result JSON")
+    graph_diff.add_argument("new_result", help="NEW analyzer-result JSON")
+    graph_diff.add_argument("--renames", help="可选的 Git rename JSON 数组")
+    graph_diff.add_argument("--mapping-hints", help="可选的人工复核映射提示 JSON 数组")
+    graph_diff.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
     return parser
 
 
@@ -53,6 +66,37 @@ def _snapshot(arguments: argparse.Namespace) -> dict:
         "new": new.to_dict(),
         "renames": [asdict(item) for item in renames],
     }
+
+
+def _read_json(path: str, expected_type: type) -> object:
+    with open(path, "r", encoding="utf-8-sig") as stream:
+        value = json.load(stream)
+    if not isinstance(value, expected_type):
+        raise ValueError(f"JSON root has unexpected type: {path}")
+    return value
+
+
+def _graph_diff(arguments: argparse.Namespace) -> dict:
+    old_result = _read_json(arguments.old_result, dict)
+    new_result = _read_json(arguments.new_result, dict)
+    renames = _read_json(arguments.renames, list) if arguments.renames else []
+    raw_hints = _read_json(arguments.mapping_hints, list) if arguments.mapping_hints else []
+    hints: list[MappingHint] = []
+    for item in raw_hints:
+        if not isinstance(item, dict):
+            raise ValueError("mapping hint entries must be objects")
+        basis = item.get("basis")
+        if not isinstance(basis, list) or any(not isinstance(value, str) for value in basis):
+            raise ValueError("mapping hint basis must be a string array")
+        hints.append(MappingHint(
+            old_label=item.get("old_label", ""),
+            new_label=item.get("new_label", ""),
+            kind=item.get("kind", ""),
+            basis=tuple(basis),
+        ))
+    return AnalyzerGraphDiffer().compare(
+        old_result, new_result, renames=renames, mapping_hints=hints
+    ).to_dict()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -79,6 +123,8 @@ def main(argv: list[str] | None = None) -> int:
             result = WorkerInputAssembler(resolver, arguments.unity_project).assemble(
                 binding, context, arguments.request_id
             ).to_dict()
+        elif arguments.command == "graph-diff":
+            result = _graph_diff(arguments)
         else:  # pragma: no cover - argparse prevents this branch
             parser.error(f"unsupported command: {arguments.command}")
     except (SnapshotError, FileNotFoundError, ValueError) as error:

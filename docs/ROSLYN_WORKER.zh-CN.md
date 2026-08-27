@@ -25,6 +25,8 @@
 - 输出 Coroutine 启动、yield、await、C# event/delegate 订阅与发布、常见组件查找关系；
 - metadata DLL 在进入 Worker 前后均以 SHA-256 校验，symlink/reparse point 被拒绝；
 - 真实 Unity metadata 中存在 `MonoBehaviour`、`UnityEventBase` 且上下文声明完整时，Unity 框架关系才允许升级为 `CONFIRMED_STATIC`。
+- Python `AnalyzerGraphDiffer` 合并 OLD/NEW Worker 结果，输出稳定符号、唯一结构和人工提示三类映射，以及节点/边的新增、删除、更新、移动和不变标签；
+- `graph-diff` CLI 输出受 `analyzer-diff.schema.json` 与 canonical digest 约束，歧义结构不会按行号猜测。
 
 ## 当前强制降级
 
@@ -40,7 +42,8 @@
 - 为 `Library/ScriptAssemblies` 输出建立可验证的源码、编译选项和产物来源绑定；
 - 覆盖更多平台名称与非 registry 包版本变体；
 - 补充状态别名、事件移除、Inspector 绑定与组件 API 变体；
-- OLD/NEW 两套 Golden Graph 与人工标注逐项比对；
+- 将 Golden Change 从当前 1 套扩展到计划的 10–20 套；
+- 为真实 Git 历史版本绑定各自的 Unity 生成上下文，形成端到端双快照命令；
 - 能力矩阵、性能与更多 adversarial cases。
 
 包版本已锁定在 `worker/ChangeLens.Analyzer/packages.lock.json`。Roslyn 包的官方来源为 [NuGet Gallery](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp/5.9.0)。
@@ -52,5 +55,11 @@
 真实 metadata 合成样本中的生命周期、UnityEvent、协程启动和组件查找边达到 `CONFIRMED_STATIC`。实际 632 文件静态分析得到 22,382 个节点、18,874 条边，其中 `READS_STATE=9994`、`WRITES_STATE=251`、`AWAITS=12`、`DIRECT_CALL=1268`；由于 4 个项目程序集产物尚无来源绑定并产生 51 条诊断，结果仍正确为 `PARTIAL`。
 
 试点只读取项目和 Unity 安装目录；未 checkout、未启动 Unity、未编译或执行 ET6 项目代码。前后 Git status 均为 203 条，规范化内容 SHA-256 均为 `7c47c6fd1bce7f21375a4c965e6bcbb92ae937e765b84b30ea6af25432389228`。
+
+## 第一套 OLD/NEW Golden Change
+
+`fixtures/unity-minimal` 的 base/target 已分别通过真实 Worker 在内存中分析，并与人工标注逐项核对。冻结结果为 OLD 19 节点、NEW 25 节点、11 对映射、14 个新增节点、8 个移除节点、14 条新增边、8 条移除边和 8 对不变关系，canonical digest 为 `e3d40c21b0026a0e47f0ffc8d921d4350e3c4afcd3d9f98a44f71db575454155`。
+
+`Claim -> TryClaim`、`CalculateBonus` 跨类型移动和 `Start -> Awake` 来自明确的人工 mapping hint，均未冒充静态符号确认。两个重复状态访问组无法唯一配对，保留为新增/删除并产生 limitation。
 
 逐项覆盖与限制见 [C#/Unity 分析能力矩阵](CAPABILITY_MATRIX.zh-CN.md)。

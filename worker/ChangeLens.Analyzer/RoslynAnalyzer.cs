@@ -290,7 +290,11 @@ internal static class RoslynAnalyzer
                     if (receiverType is not null && DerivesFrom(receiverType, "UnityEngine.Events.UnityEventBase"))
                     {
                         var confidence = UnityConfidence();
-                        var target = AddSyntheticNode(Id("unity-event", invocation), "EVENT", receiver.ToString(), invocation, "roslyn_semantic_model", confidence);
+                        var receiverSymbol = model.GetSymbolInfo(receiver).Symbol;
+                        var target = AddSyntheticNode(
+                            Id("unity-event", invocation), "EVENT",
+                            receiverSymbol is null ? receiver.ToString() : SymbolName(receiverSymbol),
+                            invocation, "roslyn_semantic_model", confidence);
                         AddEdge(methodNode, target, "INVOKES_UNITY_EVENT", "roslyn_semantic_model", confidence);
                     }
                 }

@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "status": "PARTIAL",
+  "old_request_id": "REQ-OLD-001",
+  "new_request_id": "REQ-NEW-001",
+  "source_status": {
+    "old": "PARTIAL",
+    "new": "PARTIAL"
+  },
+  "nodes": [],
+  "edges": [],
+  "mappings": [],
+  "summary": {
+    "old_nodes": 0,
+    "new_nodes": 0,
+    "mapped_nodes": 0,
+    "added_nodes": 0,
+    "removed_nodes": 0,
+    "updated_node_pairs": 0,
+    "moved_node_pairs": 0,
+    "added_edges": 0,
+    "removed_edges": 0,
+    "unchanged_edge_pairs": 0
+  },
+  "limitations": ["契约示例不包含实际分析节点。"],
+  "canonical_digest": "8888888888888888888888888888888888888888888888888888888888888888"
+}

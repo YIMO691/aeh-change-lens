@@ -24,6 +24,10 @@
 | Version Defines | 部分实现 | 确定性上下文事实 | 绑定 Unity 版本与 `packages-lock.json`；无法解析的 Git/path 包版本为 `UNKNOWN` |
 | ScriptAssemblies 来源绑定 | 部分实现 | `PROJECT_UNVERIFIED` | 找到产物但未证明其源码/选项/输出闭包 |
 | Inspector UnityEvent 绑定 | 未实现 | `UNKNOWN` | 需要序列化资产或运行时证据 |
+| OLD/NEW 稳定符号映射 | 已实现 | `CONFIRMED_STATIC` | 仅类型/方法的同一 Roslyn 限定符号 |
+| OLD/NEW 结构映射 | 部分实现 | `STRUCTURAL` | 仅唯一 kind/label/path；歧义候选不猜测 |
+| 重命名/跨类型移动映射 | 部分实现 | `STRUCTURAL` | 需要人工复核 mapping hint；尚无自动相似度判断 |
+| Golden Change | 部分实现 | 人工标注 + 确定性摘要 | 当前 1 套，目标 10–20 套 |
 
 Define Constraints 的求值规则遵循 [Unity 2020.3 Assembly Definition properties](https://docs.unity3d.com/2020.3/Documentation/Manual/class-AssemblyDefinitionImporter.html)：所有约束行必须成立，单行可使用 `||`，符号可用 `!` 否定。
 

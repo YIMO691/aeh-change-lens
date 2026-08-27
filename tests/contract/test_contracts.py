@@ -82,6 +82,7 @@ class JsonSchemaContractTests(unittest.TestCase):
     def test_examples_validate(self) -> None:
         validate("analyzer-request.schema.json", load_json("examples/analyzer-request.json"))
         validate("analyzer-result.schema.json", load_json("examples/analyzer-result.json"))
+        validate("analyzer-diff.schema.json", load_json("examples/analyzer-diff.json"))
         bundle = load_json("examples/explain-bundle.json")
         validate("explain-bundle.schema.json", bundle)
         assert_bundle_semantics(bundle)

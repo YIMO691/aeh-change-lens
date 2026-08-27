@@ -24,6 +24,10 @@
 | Version Defines | Partial | Deterministic context fact | Binds Unity and `packages-lock.json` versions; unparseable Git/path package versions are `UNKNOWN` |
 | ScriptAssemblies provenance | Partial | `PROJECT_UNVERIFIED` | Output exists but source/options/output closure is unproven |
 | Inspector UnityEvent binding | Not implemented | `UNKNOWN` | Requires serialized assets or runtime evidence |
+| OLD/NEW stable-symbol mapping | Implemented | `CONFIRMED_STATIC` | Same Roslyn-qualified type/method identity only |
+| OLD/NEW structural mapping | Partial | `STRUCTURAL` | Unique kind/label/path only; ambiguous candidates are not guessed |
+| Rename/cross-type move mapping | Partial | `STRUCTURAL` | Requires a reviewed mapping hint; no automatic similarity claim |
+| Golden Change | Partial | Human annotation + deterministic digest | 1 case currently; target is 10–20 |
 
 Define-constraint evaluation follows the [Unity 2020.3 Assembly Definition properties](https://docs.unity3d.com/2020.3/Documentation/Manual/class-AssemblyDefinitionImporter.html): all constraint lines must pass, `||` is allowed within a line, and `!` negates a symbol.
 

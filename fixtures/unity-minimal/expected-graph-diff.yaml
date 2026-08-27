@@ -1,0 +1,25 @@
+schema_version: 1
+fixture_id: UNITY-MINIMAL-001
+analyzer: ChangeLens.Analyzer
+oracle: exact_deterministic_projection
+
+source_results:
+  old_status: PARTIAL
+  new_status: PARTIAL
+  old_diagnostics: 1
+  new_diagnostics: 1
+
+summary:
+  old_nodes: 19
+  new_nodes: 25
+  mapped_nodes: 11
+  added_nodes: 14
+  removed_nodes: 8
+  updated_node_pairs: 4
+  moved_node_pairs: 1
+  added_edges: 14
+  removed_edges: 8
+  unchanged_edge_pairs: 8
+
+canonical_digest: e3d40c21b0026a0e47f0ffc8d921d4350e3c4afcd3d9f98a44f71db575454155
+expected_ambiguous_groups: 2
