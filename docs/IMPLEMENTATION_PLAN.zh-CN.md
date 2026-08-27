@@ -1,7 +1,7 @@
 # AEH Change Lens 实施方案
 
 > 文档语言：中文（权威版本）
-> 状态：`PLAN_READY / IMPLEMENTATION_AUTHORIZATION_NOT_GRANTED`
+> 状态：`PLAN_READY / IMPLEMENTATION_AUTHORIZATION_GRANTED / CL-GATE-00_PASSED / CL-WP-01_READY`
 > 对应英文版：[IMPLEMENTATION_PLAN.en.md](IMPLEMENTATION_PLAN.en.md)
 > 机器契约：[proposal.yaml](../governance/proposal.yaml)
 
@@ -36,7 +36,7 @@ Git 前后版本
 | CL-DEC-005 | 使用 10–20 个人工标注 Change 作为试点 |
 | CL-DEC-006 | 首发产品和 UI 为中文；中文方案权威，英文方案作为对应文档保留 |
 
-这些决策使计划具备可执行性，但不等于已经授权修改代码或发布产品。
+这些决策使计划具备可执行性。Owner 已于 2026-08-27 明确授权开始实施；发布仍需独立 Gate。
 
 ## 3. MVP 边界
 
@@ -285,8 +285,12 @@ Bundle 必须记录：
 
 ```text
 PLAN_READY
-IMPLEMENTATION_AUTHORIZATION_NOT_GRANTED
+IMPLEMENTATION_AUTHORIZATION_GRANTED
+CL-GATE-00_PASSED
+CL-WP-01_READY
 RELEASE_NOT_ASSESSED
 ```
 
-只有 Owner 明确授权开始实现后才能进入 `CL-WP-00`。实现授权不自动允许执行目标项目代码、上传源码、运行非隔离测试或修改 AEH 仓库。
+Owner 已于 2026-08-27 通过“开始实施”明确授权进入 `CL-WP-00`。实现授权不自动允许执行目标项目代码、上传待分析源码、运行非隔离测试或修改 AEH 仓库。
+
+`CL-GATE-00` 的原始验证证据见 [CL-GATE-00.md](../governance/gates/CL-GATE-00.md)。

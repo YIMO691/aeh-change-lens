@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aeh-change-lens"
+version = "0.1.0.dev0"
+description = "Evidence-bound old-path to new-path explanations for Unity C# changes"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "AEH Change Lens contributors" }]
+dependencies = []
+
+[project.optional-dependencies]
+contract = [
+  "jsonschema>=4.23,<5",
+  "PyYAML>=6,<7",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aeh_change_lens"]
+

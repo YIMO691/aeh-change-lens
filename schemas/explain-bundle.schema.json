@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeh-change-lens.dev/schemas/explain-bundle.schema.json",
+  "title": "AEH Change Lens Explain Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "status",
+    "language",
+    "revisions",
+    "analysis",
+    "nodes",
+    "edges",
+    "mappings",
+    "evidence",
+    "explanations",
+    "limitations",
+    "canonical_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "bundle_id": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["FRESH", "STALE", "PARTIAL", "FAILED"] },
+    "language": { "const": "zh-CN" },
+    "revisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["old", "new"],
+      "properties": {
+        "old": { "$ref": "common.schema.json#/$defs/revision_binding" },
+        "new": { "$ref": "common.schema.json#/$defs/revision_binding" }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "analyzer",
+        "analyzer_version",
+        "config_hash",
+        "generated_at",
+        "relationship_hops",
+        "unity_context"
+      ],
+      "properties": {
+        "analyzer": { "type": "string", "minLength": 1 },
+        "analyzer_version": { "type": "string", "minLength": 1 },
+        "config_hash": { "$ref": "common.schema.json#/$defs/sha256" },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "relationship_hops": { "type": "integer", "minimum": 0, "maximum": 1 },
+        "unity_context": { "enum": ["COMPLETE", "PARTIAL", "MISSING"] },
+        "aeh_artifact_manifest_hash": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/graph_node" }
+    },
+    "edges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/graph_edge" }
+    },
+    "mappings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/node_mapping" }
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence_item" }
+    },
+    "explanations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/explanation" }
+    },
+    "limitations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "canonical_digest": { "$ref": "common.schema.json#/$defs/sha256" }
+  },
+  "$defs": {
+    "graph_node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_id", "revision", "kind", "change", "label", "location", "provenance"],
+      "properties": {
+        "node_id": { "type": "string", "minLength": 1 },
+        "revision": { "enum": ["OLD", "NEW"] },
+        "kind": {
+          "enum": [
+            "ASSEMBLY",
+            "TYPE",
+            "METHOD",
+            "CONDITION",
+            "RETURN",
+            "THROW",
+            "STATE",
+            "EVENT",
+            "UNKNOWN_TARGET"
+          ]
+        },
+        "change": { "$ref": "common.schema.json#/$defs/change_kind" },
+        "label": { "type": "string", "minLength": 1 },
+        "location": { "$ref": "common.schema.json#/$defs/source_location" },
+        "provenance": { "$ref": "common.schema.json#/$defs/provenance" },
+        "evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        }
+      }
+    },
+    "graph_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "edge_id",
+        "revision",
+        "source_node_id",
+        "target_node_id",
+        "relation",
+        "change",
+        "provenance"
+      ],
+      "properties": {
+        "edge_id": { "type": "string", "minLength": 1 },
+        "revision": { "enum": ["OLD", "NEW"] },
+        "source_node_id": { "type": "string", "minLength": 1 },
+        "target_node_id": { "type": "string", "minLength": 1 },
+        "relation": {
+          "enum": [
+            "DIRECT_CALL",
+            "FRAMEWORK_LIFECYCLE",
+            "STARTS_COROUTINE",
+            "YIELDS_TO",
+            "AWAITS",
+            "SUBSCRIBES_EVENT",
+            "PUBLISHES_EVENT",
+            "INVOKES_UNITY_EVENT",
+            "INSPECTOR_BINDING_UNKNOWN",
+            "BRANCHES_TO",
+            "RETURNS_FROM",
+            "THROWS_FROM",
+            "READS_STATE",
+            "WRITES_STATE",
+            "SERIALIZED_REFERENCE",
+            "COMPONENT_LOOKUP",
+            "DYNAMIC_DISPATCH_UNKNOWN"
+          ]
+        },
+        "change": { "$ref": "common.schema.json#/$defs/change_kind" },
+        "provenance": { "$ref": "common.schema.json#/$defs/provenance" },
+        "evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        }
+      }
+    },
+    "node_mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mapping_id", "old_node_id", "new_node_id", "kind", "confidence", "basis"],
+      "properties": {
+        "mapping_id": { "type": "string", "minLength": 1 },
+        "old_node_id": { "type": "string", "minLength": 1 },
+        "new_node_id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["SAME_SYMBOL", "RENAMED", "MOVED", "RENAMED_AND_MOVED", "HEURISTIC", "AMBIGUOUS"] },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" },
+        "basis": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "alternatives": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        }
+      }
+    },
+    "evidence_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "kind", "authority", "digest", "label"],
+      "properties": {
+        "evidence_id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["REQ", "AC", "EV", "TEST", "CODE", "VER", "RUNTIME"] },
+        "authority": { "enum": ["AEH_BOUND", "SOURCE_BOUND", "OBSERVATION_BOUND"] },
+        "digest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "label": { "type": "string", "minLength": 1 },
+        "uri": { "type": ["string", "null"] }
+      }
+    },
+    "explanation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["explanation_id", "statement_zh", "classification", "subject_refs", "evidence_refs"],
+      "properties": {
+        "explanation_id": { "type": "string", "minLength": 1 },
+        "statement_zh": { "type": "string", "minLength": 1 },
+        "classification": { "enum": ["SUPPORTED", "INFERRED", "UNLINKED"] },
+        "subject_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "classification": { "const": "SUPPORTED" } },
+            "required": ["classification"]
+          },
+          "then": { "properties": { "evidence_refs": { "minItems": 1 } } }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0.0",
+  "request_id": "REQ-UNITY-MINIMAL-001",
+  "status": "PARTIAL",
+  "capabilities": {
+    "syntax": true,
+    "semantic_model": false,
+    "unity_context": "PARTIAL"
+  },
+  "nodes": [],
+  "edges": [],
+  "diagnostics": [
+    {
+      "code": "CL-CS-CTX-001",
+      "severity": "WARNING",
+      "message_zh": "缺少完整 Unity 引用，结果已降级为部分分析。",
+      "source_ids": ["REQ-UNITY-MINIMAL-001"]
+    }
+  ]
+}
+

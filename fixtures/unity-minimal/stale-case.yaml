@@ -1,0 +1,8 @@
+schema_version: 1
+fixture_id: UNITY-MINIMAL-001-STALE
+bound_input: target/Assets/Scripts/Gameplay/RewardController.cs
+mutation: append_a_single_whitespace_byte
+expected_status: STALE
+forbidden_status: FRESH
+oracle: Any byte-level change to a bound source manifest invalidates reuse of the prior bundle.
+

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeh-change-lens.dev/schemas/common.schema.json",
+  "title": "AEH Change Lens common contract types",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "confidence": {
+      "enum": [
+        "CONFIRMED_STATIC",
+        "OBSERVED_RUNTIME",
+        "STRUCTURAL",
+        "INFERRED",
+        "UNKNOWN"
+      ]
+    },
+    "change_kind": {
+      "enum": [
+        "ADDED",
+        "REMOVED",
+        "UPDATED",
+        "MOVED",
+        "UNCHANGED_CONTEXT"
+      ]
+    },
+    "source_location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision_role",
+        "path",
+        "start_line",
+        "end_line",
+        "content_hash"
+      ],
+      "properties": {
+        "revision_role": { "enum": ["OLD", "NEW"] },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+        },
+        "start_line": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "confidence", "source_ids"],
+      "properties": {
+        "origin": { "$ref": "#/$defs/non_empty_string" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "source_ids": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/non_empty_string" },
+          "uniqueItems": true
+        },
+        "limitations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/non_empty_string" },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    },
+    "revision_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "revision", "tree_hash", "source_manifest_hash"],
+      "properties": {
+        "role": { "enum": ["OLD", "NEW"] },
+        "revision": { "$ref": "#/$defs/non_empty_string" },
+        "tree_hash": { "$ref": "#/$defs/sha256" },
+        "source_manifest_hash": { "$ref": "#/$defs/sha256" },
+        "dirty": { "type": "boolean", "default": false }
+      }
+    }
+  }
+}
+
