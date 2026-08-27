@@ -1,7 +1,7 @@
 # AEH Change Lens
 
-> 状态：已授权实施；`CL-GATE-00` 已通过，正在实施 `CL-WP-01`。
-> Status: implementation authorized; `CL-GATE-00` passed and `CL-WP-01` is active.
+> 状态：已授权实施；`CL-GATE-00`、`CL-GATE-01` 已通过，`CL-WP-02` 可以开始。
+> Status: implementation authorized; `CL-GATE-00` and `CL-GATE-01` passed; `CL-WP-02` is ready.
 
 ## 中文
 
@@ -46,7 +46,8 @@ change-lens snapshot <repository-root> --base <commit> --target WORKTREE --prett
 PLAN_READY
 IMPLEMENTATION_AUTHORIZATION_GRANTED
 CL-GATE-00_PASSED
-CL-WP-01_IN_PROGRESS
+CL-GATE-01_PASSED
+CL-WP-02_READY
 RELEASE_NOT_ASSESSED
 ```
 
