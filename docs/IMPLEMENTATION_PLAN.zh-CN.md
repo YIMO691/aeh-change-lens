@@ -29,12 +29,12 @@ Git 前后版本
 
 | ID | 决策 |
 |---|---|
-| CL-DEC-001 | 首发分析语言为 Python |
-| CL-DEC-002 | 使用独立仓库与独立 Python 包，不进入 AEH TCB |
+| CL-DEC-001 | 首发分析语言为 C#，主要场景为 Unity/游戏业务代码 |
+| CL-DEC-002 | 使用独立仓库；Python 负责 CLI/编排，.NET/Roslyn Worker 负责 C# 语义分析 |
 | CL-DEC-003 | 默认离线确定性分析，LLM 解释只能显式启用 |
 | CL-DEC-004 | 主要用户为代码修改者与 Reviewer |
 | CL-DEC-005 | 使用 10–20 个人工标注 Change 作为试点 |
-| CL-DEC-006 | 产品与文档双语，中文为默认和权威语言 |
+| CL-DEC-006 | 首发产品和 UI 为中文；中文方案权威，英文方案作为对应文档保留 |
 
 这些决策使计划具备可执行性，但不等于已经授权修改代码或发布产品。
 
@@ -45,14 +45,14 @@ Git 前后版本
 - 单个本地 Git 仓库；
 - 单个显式 `CHG-*`；
 - base commit 与 worktree/目标 commit 对比；
-- Python 文件；
+- Unity 项目中的 C# 文件、`.asmdef` 和可读取的项目编译上下文；
 - 变更符号及最多一层调用上下游；
 - 函数、方法、关键条件、return/raise 和已配置副作用；
 - AST 级新增、删除、更新、移动映射；
 - AEH 需求、证据、测试、代码和验证引用；
 - 确定性 `explain-bundle.json`；
 - 本地只读 Web UI 与静态 HTML 导出；
-- 中文默认、英文切换；
+- 首发中文 UI；英文方案文档保留，英文 UI 不作为 MVP Gate；
 - 明确的来源、置信度、未知项和失效状态。
 
 ### 3.2 不包含
@@ -74,7 +74,7 @@ Change Lens 是投影层，不是新的事实所有者。
 |---|---|---|
 | Revision 和源码字节 | Git/工作树 | `SOURCE_BOUND` |
 | AEH 状态和 Gate | AEH 工件 | `AEH_BOUND` |
-| 编译器/索引器符号关系 | Python 语义适配器 | `CONFIRMED_STATIC` |
+| 编译器/索引器符号关系 | Roslyn C# 语义分析 | `CONFIRMED_STATIC` |
 | AST 结构 | Tree-sitter/Python AST | `STRUCTURAL` |
 | 实际运行路径 | 获授权的运行时证据 | `OBSERVED_RUNTIME` |
 | 规则或 LLM 解释 | 派生结果 | `INFERRED` |
@@ -88,8 +88,8 @@ Change Lens 是投影层，不是新的事实所有者。
 Snapshot Resolver
   读取 Git 对象，不 checkout，不执行项目代码
         |
-Python Language Adapter
-  AST + 符号 + 调用 + 分支 + 副作用识别
+C#/Unity Language Adapter
+  Roslyn AST/符号/调用 + Unity 程序集与生命周期关系
         |
 Semantic Differ
   old/new 节点映射与图变化
@@ -109,7 +109,7 @@ Local Viewer / Static Export
 ```text
 src/aeh_change_lens/
   snapshot/
-  languages/python/
+  languages/csharp/
   semantic_diff/
   evidence/
   explain/
@@ -124,26 +124,28 @@ tests/
   e2e/
 ```
 
+技术依据：Roslyn 同时提供语法树、符号表和 SemanticModel，适合作为 C# confirmed-static 关系的权威分析层；Unity 的 `.asmdef`、平台 define、编译引用和 `CompilationPipeline` 决定实际程序集边界；MonoBehaviour 事件函数属于 Unity 框架调度，不能伪装成源码中的普通直接调用。参考 [Roslyn Compiler API Model](https://learn.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/compiler-api-model)、[Unity Assembly Definitions](https://docs.unity3d.com/Manual/assembly-definitions.html) 和 [Unity Event Function Execution Order](https://docs.unity3d.com/Manual/execution-order.html)。
+
 ## 6. 核心数据契约
 
 每个图节点至少包含：
 
 ```yaml
-node_id: python:reward.py:RewardService.claim
+node_id: csharp:RewardService.cs:RewardService.Claim
 kind: method
 change: UPDATED
 old_location:
-  path: reward.py
+  path: Assets/Scripts/RewardService.cs
   start_line: 40
   end_line: 66
   content_hash: sha256...
 new_location:
-  path: reward.py
+  path: Assets/Scripts/RewardService.cs
   start_line: 42
   end_line: 73
   content_hash: sha256...
 provenance:
-  origin: python_semantic_adapter
+  origin: roslyn_unity_adapter
   confidence: CONFIRMED_STATIC
 links:
   requirements: [REQ-002]
@@ -178,11 +180,11 @@ Bundle 必须记录：
 
 `CL-GATE-01`：不 checkout、不执行项目代码；路径穿越和 symlink/reparse escape 阻断；输入变化必定 stale。
 
-### CL-WP-02 Python Language Adapter
+### CL-WP-02 C#/Unity Language Adapter
 
-产出：模块、类、函数、调用、分支、异常和副作用节点；能力矩阵和限制。
+产出：程序集、类型、方法、调用、分支、异常和副作用节点；解析 `.asmdef`、平台/define 条件和 Unity 编译引用；识别 MonoBehaviour 生命周期、Coroutine、`async/await`、delegate/event/UnityEvent、序列化引用及常见组件访问关系；提供能力矩阵和限制。
 
-`CL-GATE-02`：Golden Graph 与人工标注一致；语法错误返回显式 partial；动态调用不冒充 confirmed。
+`CL-GATE-02`：Golden Graph 与人工标注一致；Roslyn SemanticModel 可用时才把跨文件符号关系标为 confirmed；缺少 Unity 程序集、条件编译分支或工程上下文时返回显式 partial；反射、字符串消息、UnityEvent Inspector 绑定和动态调用不冒充 confirmed。
 
 ### CL-WP-03 Semantic Differ
 
@@ -202,11 +204,11 @@ Bundle 必须记录：
 
 `CL-GATE-05`：每项关键陈述可引用或标记推断；源码注释的 prompt injection 不能改变权限和置信度；禁用 LLM 仍可完整使用。
 
-### CL-WP-06 双语 Viewer 与导出
+### CL-WP-06 中文 Viewer 与导出
 
-产出：同步 old/new lane、证据详情、中文默认/英文切换、静态导出。
+产出：同步 old/new lane、证据详情、中文首发界面和静态导出；英文 UI 保留为后续能力，不阻塞 MVP。
 
-`CL-GATE-06`：不用颜色也能区分变化；键盘可用；离线模式无网络请求；中英文共享同一事实 Bundle。
+`CL-GATE-06`：不用颜色也能区分变化；键盘可用；离线模式无网络请求；中文术语与事实 Bundle 一致。
 
 ### CL-WP-07 Pilot 决策
 
@@ -226,7 +228,8 @@ Bundle 必须记录：
 - `CL-AC-008`：关键修改必须证据关联或明确 `UNLINKED`。
 - `CL-AC-009`：缺失、非法、越界、不支持和无法解析均显式阻断或 partial。
 - `CL-AC-010`：试点 Reviewer 能回答五个产品问题。
-- `CL-AC-011`：默认中文、可切换英文，两个语言版本不改变事实语义。
+- `CL-AC-011`：首发 UI 为中文；英文方案文档与中文权威方案不产生事实冲突，未来英文 UI 必须复用同一 Bundle。
+- `CL-AC-012`：Unity 程序集、生命周期和平台条件进入分析来源；上下文不完整时不得输出完整可信链路。
 
 ## 9. 不变量
 
@@ -241,6 +244,8 @@ Bundle 必须记录：
 - `CL-INV-009`：本地读取拒绝 path/symlink/reparse escape。
 - `CL-INV-010`：导出遵循明确的源码披露策略。
 - `CL-INV-011`：翻译层不能增加、删除或改变事实结论。
+- `CL-INV-012`：Unity 生命周期约定不能被当作普通直接调用；必须标记为框架调度关系。
+- `CL-INV-013`：缺失 `.asmdef`、define、Unity 引用或生成工程上下文时，语义分析必须降级并披露限制。
 
 ## 10. 主要风险
 
@@ -252,10 +257,12 @@ Bundle 必须记录：
 | CL-RISK-004 | 扩大 AEH TCB | 独立包、只读接口、受保护文件 manifest |
 | CL-RISK-005 | 源码泄露 | 离线默认、显式导出、限制片段 |
 | CL-RISK-006 | Prompt injection | 仓库文本一律视为数据，输出 Schema 和引用校验 |
-| CL-RISK-007 | Python 动态语义误判 | 能力矩阵、partial/unknown、可选运行时证据 |
+| CL-RISK-007 | Unity 动态绑定和框架调度误判 | Roslyn + Unity 规则层、partial/unknown、可选运行时证据 |
 | CL-RISK-008 | 第三方许可证冲突 | WP-00 许可证审查、外部 Adapter 隔离 |
 | CL-RISK-009 | 图正确但没有产品价值 | 对照试点和停止 Gate |
 | CL-RISK-010 | 中英文事实漂移 | 单一 Bundle、术语表、双语一致性测试 |
+| CL-RISK-011 | Unity 编译上下文不完整 | 读取 `.asmdef`、define 和引用清单；缺失时禁止完整结论 |
+| CL-RISK-012 | 生命周期/Coroutine/事件链被画成普通调用 | 使用专用边类型和框架调度 provenance |
 
 ## 11. 防偏移规则
 

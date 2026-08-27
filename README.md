@@ -17,9 +17,9 @@ AEH Change Lens 是一个只读的代码变更解释工具。它把一次 AI 辅
 
 首个版本的已确认默认项：
 
-- 文档和界面双语，中文优先；
-- 独立于 AEH 的仓库和 Python 包；
-- 首发语言为 Python；
+- 首发产品语言和界面为中文，保留英文方案文档；
+- 独立于 AEH 的仓库，采用 Python 编排层 + .NET/Roslyn 分析 Worker；
+- 首发分析语言为 C#，主要面向 Unity/游戏业务代码；
 - 默认完全离线、确定性分析；
 - LLM 解释仅在用户显式启用时使用；
 - 目标用户为代码修改者和 Reviewer；
@@ -48,9 +48,9 @@ It does not claim to expose hidden model chain of thought. It explains only rati
 
 Confirmed defaults for the first version:
 
-- bilingual product and documentation, Chinese first;
-- a repository and Python package separate from AEH;
-- Python as the first analyzed language;
+- Chinese as the launch product/UI language, with English plan documentation;
+- a repository separate from AEH, with Python orchestration and a .NET/Roslyn analyzer worker;
+- C# as the first analyzed language, focused on Unity/gameplay code;
 - deterministic offline analysis by default;
 - optional LLM explanation only after explicit enablement;
 - change authors and reviewers as the primary users;

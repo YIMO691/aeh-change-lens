@@ -15,18 +15,18 @@ The product explains externally recorded rationale. It never claims to expose or
 
 | ID | Decision |
 |---|---|
-| CL-DEC-001 | Python is the first analyzed language |
-| CL-DEC-002 | Separate repository and Python package outside the AEH TCB |
+| CL-DEC-001 | C# is the first analyzed language, focused on Unity/gameplay code |
+| CL-DEC-002 | Separate repository; Python CLI/orchestration plus a .NET/Roslyn analyzer worker |
 | CL-DEC-003 | Deterministic offline core; LLM explanation is explicit opt-in |
 | CL-DEC-004 | Change authors and reviewers are the primary users |
 | CL-DEC-005 | Pilot with 10–20 manually annotated Changes |
-| CL-DEC-006 | Bilingual product and documentation, Chinese authoritative and first |
+| CL-DEC-006 | Chinese launch product/UI; Chinese plan authoritative, English plan retained |
 
 These decisions make the plan executable. They do not authorize implementation or release.
 
 ## 3. MVP boundary
 
-In scope: one local Git repository, one `CHG-*`, base versus worktree/target revision, Python, changed symbols plus one bounded relationship hop, calls/branches/errors/recognized side effects, syntax-aware graph delta, AEH evidence links, deterministic Explain Bundle, local read-only UI, static HTML export, and Chinese-first bilingual presentation.
+In scope: one local Git repository, one `CHG-*`, base versus worktree/target revision, C# in Unity projects, `.asmdef` and available compilation context, changed symbols plus one bounded relationship hop, calls/branches/errors/recognized side effects, Unity lifecycle and event relationships, syntax-aware graph delta, AEH evidence links, deterministic Explain Bundle, local read-only Chinese UI, and static HTML export.
 
 Out of scope: whole-repository knowledge graphs, multiple first-release languages, hidden reasoning capture, AEH Gate mutation, default networking or telemetry, complete dynamic/runtime reconstruction, multi-agent orchestration, and presenting inference as fact.
 
@@ -55,11 +55,11 @@ The static MVP reads Git objects without checkout and does not execute project c
 |---|---|---|
 | CL-WP-00 | Bundle/adapter contracts, annotated fixtures, privacy policy | P0 oracles, adversarial corpus and licenses reviewed |
 | CL-WP-01 | Snapshot resolver, digests, rename/path/stale handling | No checkout/execution; escape blocked; stale proven |
-| CL-WP-02 | Python symbols, calls, branches, errors, side effects | Golden graphs pass; dynamic ambiguity remains explicit |
+| CL-WP-02 | Roslyn C#/Unity symbols, calls, branches, lifecycle, events and side effects | Golden graphs pass; missing Unity context and dynamic binding remain explicit |
 | CL-WP-03 | Old/new node mapping and graph delta | Mapping measured; move/rename and ambiguity handled honestly |
 | CL-WP-04 | Read-only AEH linker and canonical Bundle | Deterministic; forged/missing/stale refs fail closed; AEH unchanged |
 | CL-WP-05 | Deterministic and optional LLM explanation | Claims cited or inferred; prompt injection cannot change authority |
-| CL-WP-06 | Bilingual old/new viewer and export | Same facts in both languages; accessible; offline |
+| CL-WP-06 | Chinese old/new viewer and export | Chinese facts match the Bundle; accessible; offline |
 | CL-WP-07 | Measured pilot | Explicit CONTINUE, REPOSITION, or STOP decision |
 
 ## 7. P0 acceptance criteria
@@ -74,13 +74,14 @@ The static MVP reads Git objects without checkout and does not execute project c
 - `CL-AC-008`: material changes are evidence-linked or visibly `UNLINKED`.
 - `CL-AC-009`: missing, invalid, escaped, unsupported and unresolved inputs fail closed or become explicit partial results.
 - `CL-AC-010`: pilot reviewers can answer the five product questions.
-- `CL-AC-011`: Chinese is default, English is available, and translation cannot change facts.
+- `CL-AC-011`: the launch UI is Chinese; English plan documentation cannot conflict with the authoritative Chinese plan, and a future English UI must reuse the same Bundle.
+- `CL-AC-012`: Unity assembly, lifecycle and platform context is provenance-bound; incomplete context cannot yield a complete-confidence path.
 
 ## 8. Invariants and risks
 
-The governed invariants are `CL-INV-001` through `CL-INV-011`; risks are `CL-RISK-001` through `CL-RISK-010`. Their authoritative statements and mitigations are in the Chinese plan and machine-readable proposal.
+The governed invariants are `CL-INV-001` through `CL-INV-013`; risks are `CL-RISK-001` through `CL-RISK-012`. Their authoritative statements and mitigations are in the Chinese plan and machine-readable proposal.
 
-The main risks are false certainty, graph explosion, stale explanations, AEH TCB expansion, source disclosure, prompt injection, Python dynamic-semantics mismatch, license conflict, lack of reviewer value, and bilingual semantic drift.
+The main risks are false certainty, graph explosion, stale explanations, AEH TCB expansion, source disclosure, prompt injection, incomplete Unity compilation context, framework lifecycle/event misrepresentation, license conflict, lack of reviewer value, and bilingual semantic drift.
 
 ## 9. Anti-drift PR rule
 

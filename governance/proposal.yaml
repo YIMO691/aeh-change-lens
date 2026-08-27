@@ -9,10 +9,10 @@ status:
 owner_decisions:
   - id: CL-DEC-001
     topic: first_supported_language
-    decision: Python
+    decision: CSharp_for_Unity_and_gameplay_code
   - id: CL-DEC-002
     topic: delivery_topology
-    decision: separate_repository_and_python_package
+    decision: separate_repository_with_python_orchestration_and_dotnet_roslyn_worker
   - id: CL-DEC-003
     topic: llm_policy
     decision: deterministic_offline_core_with_explicit_opt_in_llm
@@ -26,11 +26,17 @@ owner_decisions:
     topic: language_policy
     decision:
       supported: [zh-CN, en]
-      default: zh-CN
+      launch_product_ui: zh-CN
+      english_ui_gate: post_mvp
       authoritative_document: docs/IMPLEMENTATION_PLAN.zh-CN.md
 
 scope:
-  first_analyzed_language: Python
+  first_analyzed_language: CSharp
+  primary_ecosystem: Unity_and_gameplay_business_code
+  semantic_engine: Microsoft_CodeAnalysis_Roslyn
+  syntax_fallback: Tree_sitter_or_Roslyn_syntax_only_partial_mode
+  orchestration_runtime: Python
+  analyzer_runtime: dotnet
   repository_mode: local_single_git_repository
   change_mode: one_explicit_aeh_change
   graph_boundary: changed_symbols_plus_one_bounded_relationship_hop
@@ -58,6 +64,7 @@ p0_acceptance:
   - CL-AC-009
   - CL-AC-010
   - CL-AC-011
+  - CL-AC-012
 
 invariants:
   - CL-INV-001
@@ -71,6 +78,8 @@ invariants:
   - CL-INV-009
   - CL-INV-010
   - CL-INV-011
+  - CL-INV-012
+  - CL-INV-013
 
 work_packages:
   - id: CL-WP-00
@@ -109,6 +118,8 @@ risks:
   - CL-RISK-008
   - CL-RISK-009
   - CL-RISK-010
+  - CL-RISK-011
+  - CL-RISK-012
 
 drift_control:
   one_primary_work_package_per_pr: true
