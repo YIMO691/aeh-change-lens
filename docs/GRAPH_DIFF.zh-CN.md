@@ -42,3 +42,21 @@ mapping hint 是 JSON 数组：
 当前冻结投影：OLD 19 节点、NEW 25 节点、11 对映射、14 个新增节点、8 个移除节点、14 条新增边、8 条移除边、8 对不变关系。两组重复状态访问由于无法唯一对应而保持未映射；这是预期的不确定性，不是漏报掩盖。
 
 `canonical_digest` 覆盖状态、双版本图、映射、摘要和限制。相同输入与配置必须产生相同摘要。
+
+## 一键历史分析
+
+当两个 Git lane 都包含可审计的 Unity 生成工程文件时，可以直接执行：
+
+```powershell
+change-lens analyze-change D:\game-repo Unity `
+  --assembly Game.Runtime `
+  --base <commit> `
+  --target WORKTREE `
+  --request-id CHANGE-001 `
+  --mapping-hints mapping-hints.json `
+  --pretty
+```
+
+命令依次绑定 OLD/NEW snapshot、将每一侧的 `*.cs`、`*.asmdef`、`*.csproj`、ProjectVersion 和 package lock 验哈希后物化到独立临时目录、分别构建 Unity Context、运行仓库自带静态 Worker，再生成 Graph Diff。输出同时包含两个 revision manifest、Context digest、rename、policy 与最终 canonical digest。
+
+这是严格模式：每一侧必须包含 `<Assembly>.csproj`。若 Unity 默认忽略的生成 csproj 没有进入 Git revision 或未忽略 worktree，命令直接失败；它不会用 NEW csproj 代替 OLD，也不会启动 Unity 重新生成。绝对 metadata HintPath 指向的 DLL 仍逐字节验哈希，未绑定的相对产物只会形成 `PARTIAL`。

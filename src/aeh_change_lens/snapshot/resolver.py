@@ -12,7 +12,7 @@ from .models import FileBinding, RenameBinding, RevisionRole, SnapshotBinding
 from .security import assert_safe_repository_root, normalize_repo_relative, secure_worktree_path
 
 
-DEFAULT_SOURCE_SUFFIXES = (".cs", ".asmdef")
+DEFAULT_SOURCE_SUFFIXES = (".cs", ".asmdef", ".csproj")
 DEFAULT_EXACT_PATHS = (
     "ProjectSettings/ProjectVersion.txt",
     "Packages/manifest.json",

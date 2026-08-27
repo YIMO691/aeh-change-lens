@@ -8,7 +8,7 @@
 
 - Git revision：先解析成不可变 commit OID，再用 `git ls-tree` 与 `git cat-file` 读取对象；
 - `WORKTREE`：读取 tracked 与未忽略的 untracked 文件，不修改 index；
-- 首发选择器：`*.cs`、`*.asmdef`、`ProjectSettings/ProjectVersion.txt`。
+- 当前选择器：`*.cs`、`*.asmdef`、`*.csproj`、`ProjectSettings/ProjectVersion.txt`、`Packages/manifest.json` 与 `Packages/packages-lock.json`。
 
 ## 摘要语义
 
@@ -36,5 +36,5 @@
 - 未进行 Git LFS 内容展开；绑定的是仓库/工作树中实际读到的字节；
 - worktree 的精确 rename 补充检测只确认唯一、字节完全相同的移动；修改后移动由 Git 自身 rename 检测或后续语义映射处理；
 - 文件名必须是 UTF-8；无法解码时 fail closed；
+- ignored 且未跟踪的 Unity 生成 csproj 不进入 worktree binding；历史分析不会绕过该边界；
 - 本工作包不解析 C# 语义。
-

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeh-change-lens.dev/schemas/change-analysis.schema.json",
+  "title": "Evidence-bound OLD/NEW revision analysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "request_id", "status", "revisions", "renames", "contexts",
+    "diff", "policy", "limitations", "canonical_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["FRESH", "PARTIAL"] },
+    "revisions": {
+      "type": "object", "additionalProperties": false,
+      "required": ["old", "new"],
+      "properties": {
+        "old": { "$ref": "common.schema.json#/$defs/revision_binding" },
+        "new": { "$ref": "common.schema.json#/$defs/revision_binding" }
+      }
+    },
+    "renames": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["old_path", "new_path", "similarity"],
+        "properties": {
+          "old_path": { "type": "string", "minLength": 1 },
+          "new_path": { "type": "string", "minLength": 1 },
+          "similarity": { "type": "integer", "minimum": 0, "maximum": 100 }
+        }
+      }
+    },
+    "contexts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["old", "new"],
+      "properties": {
+        "old": { "$ref": "#/$defs/context_summary" },
+        "new": { "$ref": "#/$defs/context_summary" }
+      }
+    },
+    "diff": { "$ref": "analyzer-diff.schema.json" },
+    "policy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["network_access", "execute_project_code", "checkout"],
+      "properties": {
+        "network_access": { "const": "DENY" },
+        "execute_project_code": { "const": false },
+        "checkout": { "const": false }
+      }
+    },
+    "limitations": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "canonical_digest": { "$ref": "common.schema.json#/$defs/sha256" }
+  },
+  "$defs": {
+    "context_summary": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "context_digest", "completeness", "unity_version", "generated_project",
+        "source_files", "limitations"
+      ],
+      "properties": {
+        "context_digest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "completeness": { "enum": ["COMPLETE", "PARTIAL"] },
+        "unity_version": { "type": ["string", "null"] },
+        "generated_project": {
+          "type": "object", "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+          }
+        },
+        "source_files": { "type": "integer", "minimum": 1 },
+        "limitations": {
+          "type": "array", "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

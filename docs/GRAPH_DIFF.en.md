@@ -18,3 +18,9 @@ An edge is paired as `UNCHANGED_CONTEXT` only when its mapped endpoints and rela
 `fixtures/unity-minimal` is the first human-annotated Golden Change. Its frozen projection contains 19 OLD nodes, 25 NEW nodes, 11 mappings, 14 added nodes, 8 removed nodes, 14 added edges, 8 removed edges, and 8 unchanged edge pairs. Two duplicate state-access groups deliberately remain ambiguous and unmapped.
 
 The `canonical_digest` covers the source statuses, both graphs, mappings, summary, and limitations. Identical inputs and configuration must produce the same digest.
+
+## One-command historical analysis
+
+`change-lens analyze-change <repository> <unity-project-relative-path> --assembly <name> --base <commit> --target WORKTREE --request-id <id>` binds both snapshots, hash-validates and materializes each lane into a separate temporary directory, builds each Unity Context, runs the repository-owned static Worker, and emits the final graph diff together with revision manifests, context digests, rename evidence, policy, and a canonical digest.
+
+This is strict by design: each lane must contain its own generated `<Assembly>.csproj`. A Unity-generated project file that is ignored and absent from a Git revision is not silently replaced with the NEW worktree file; analysis fails closed instead. The command never starts Unity or executes target-project code. Absolute metadata HintPaths remain byte-hash validated, while unavailable relative outputs make the result `PARTIAL`.

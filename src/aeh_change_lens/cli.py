@@ -8,6 +8,7 @@ from dataclasses import asdict
 from .languages.csharp import (
     AnalyzerGraphDiffer,
     MappingHint,
+    RevisionChangeAnalyzer,
     UnityContextBuilder,
     WorkerInputAssembler,
 )
@@ -49,6 +50,17 @@ def _parser() -> argparse.ArgumentParser:
     graph_diff.add_argument("--renames", help="可选的 Git rename JSON 数组")
     graph_diff.add_argument("--mapping-hints", help="可选的人工复核映射提示 JSON 数组")
     graph_diff.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
+    analyze_change = subcommands.add_parser(
+        "analyze-change", help="一键分析 Git OLD/NEW Unity 快照并输出链路差异"
+    )
+    analyze_change.add_argument("repository", help="Git 仓库根目录")
+    analyze_change.add_argument("unity_project", help="仓库内 Unity 项目的相对路径")
+    analyze_change.add_argument("--assembly", required=True, help="Assembly Definition name")
+    analyze_change.add_argument("--base", required=True, help="OLD Git revision")
+    analyze_change.add_argument("--target", default="WORKTREE", help="NEW Git revision 或 WORKTREE")
+    analyze_change.add_argument("--request-id", required=True)
+    analyze_change.add_argument("--mapping-hints", help="可选的人工复核映射提示 JSON 数组")
+    analyze_change.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
     return parser
 
 
@@ -80,7 +92,14 @@ def _graph_diff(arguments: argparse.Namespace) -> dict:
     old_result = _read_json(arguments.old_result, dict)
     new_result = _read_json(arguments.new_result, dict)
     renames = _read_json(arguments.renames, list) if arguments.renames else []
-    raw_hints = _read_json(arguments.mapping_hints, list) if arguments.mapping_hints else []
+    hints = _mapping_hints(arguments.mapping_hints)
+    return AnalyzerGraphDiffer().compare(
+        old_result, new_result, renames=renames, mapping_hints=hints
+    ).to_dict()
+
+
+def _mapping_hints(path: str | None) -> list[MappingHint]:
+    raw_hints = _read_json(path, list) if path else []
     hints: list[MappingHint] = []
     for item in raw_hints:
         if not isinstance(item, dict):
@@ -94,9 +113,26 @@ def _graph_diff(arguments: argparse.Namespace) -> dict:
             kind=item.get("kind", ""),
             basis=tuple(basis),
         ))
-    return AnalyzerGraphDiffer().compare(
-        old_result, new_result, renames=renames, mapping_hints=hints
-    ).to_dict()
+    return hints
+
+
+def _analyze_change(arguments: argparse.Namespace) -> dict:
+    resolver = SnapshotResolver(arguments.repository)
+    old = resolver.resolve_revision(arguments.base, "OLD")
+    new = (
+        resolver.resolve_worktree("NEW")
+        if arguments.target == "WORKTREE"
+        else resolver.resolve_revision(arguments.target, "NEW")
+    )
+    renames = resolver.detect_renames(arguments.base, arguments.target)
+    return RevisionChangeAnalyzer(resolver, arguments.unity_project).analyze(
+        old,
+        new,
+        arguments.assembly,
+        arguments.request_id,
+        renames=renames,
+        mapping_hints=_mapping_hints(arguments.mapping_hints),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -125,6 +161,8 @@ def main(argv: list[str] | None = None) -> int:
             ).to_dict()
         elif arguments.command == "graph-diff":
             result = _graph_diff(arguments)
+        elif arguments.command == "analyze-change":
+            result = _analyze_change(arguments)
         else:  # pragma: no cover - argparse prevents this branch
             parser.error(f"unsupported command: {arguments.command}")
     except (SnapshotError, FileNotFoundError, ValueError) as error:

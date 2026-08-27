@@ -5,7 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version", "completeness", "unity_version", "assembly", "applicability",
+    "schema_version", "completeness", "unity_version", "generated_project", "assembly", "applicability",
     "package_manifest", "defines",
     "metadata_references", "project_references", "source_files", "limitations", "context_digest"
   ],
@@ -13,6 +13,17 @@
     "schema_version": { "const": "1.0.0" },
     "completeness": { "enum": ["COMPLETE", "PARTIAL", "MISSING"] },
     "unity_version": { "type": ["string", "null"] },
+    "generated_project": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+\\.csproj$"
+        },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
     "assembly": {
       "oneOf": [
         { "type": "null" },

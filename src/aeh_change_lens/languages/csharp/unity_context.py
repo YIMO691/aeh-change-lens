@@ -23,6 +23,12 @@ class MetadataReferenceBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class GeneratedProjectBinding:
+    path: str
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
 class VersionDefineBinding:
     resource: str
     expression: str
@@ -98,6 +104,7 @@ class UnityCompilationContext:
     schema_version: str
     completeness: str
     unity_version: str | None
+    generated_project: GeneratedProjectBinding
     assembly: AssemblyDefinitionBinding | None
     applicability: AssemblyApplicabilityBinding
     package_manifest: PackageManifestBinding | None
@@ -248,6 +255,10 @@ class UnityContextBuilder:
             document = ET.parse(csproj)
         except ET.ParseError as error:
             raise ValueError(f"invalid generated Unity project XML: {csproj.name}") from error
+        generated_project = GeneratedProjectBinding(
+            path=csproj.relative_to(self.root).as_posix(),
+            sha256=self._hash_file(csproj),
+        )
         assembly = self._assembly_definition(assembly_name)
         unity_version = self._unity_version()
         package_manifest = self._package_manifest()
@@ -302,6 +313,7 @@ class UnityContextBuilder:
             "schema_version": "1.0.0",
             "completeness": completeness,
             "unity_version": unity_version,
+            "generated_project": asdict(generated_project),
             "assembly": asdict(assembly) if assembly else None,
             "applicability": asdict(applicability),
             "package_manifest": asdict(package_manifest) if package_manifest else None,
@@ -315,6 +327,7 @@ class UnityContextBuilder:
             schema_version="1.0.0",
             completeness=completeness,
             unity_version=unity_version,
+            generated_project=generated_project,
             assembly=assembly,
             applicability=applicability,
             package_manifest=package_manifest,

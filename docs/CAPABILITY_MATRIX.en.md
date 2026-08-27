@@ -28,6 +28,7 @@
 | OLD/NEW structural mapping | Partial | `STRUCTURAL` | Unique kind/label/path only; ambiguous candidates are not guessed |
 | Rename/cross-type move mapping | Partial | `STRUCTURAL` | Requires a reviewed mapping hint; no automatic similarity claim |
 | Golden Change | Partial | Human annotation + deterministic digest | 1 case currently; target is 10–20 |
+| Historical Git dual-context analysis | Partial | Snapshot-bound | Each lane must contain its generated csproj; missing input fails closed |
 
 Define-constraint evaluation follows the [Unity 2020.3 Assembly Definition properties](https://docs.unity3d.com/2020.3/Documentation/Manual/class-AssemblyDefinitionImporter.html): all constraint lines must pass, `||` is allowed within a line, and `!` negates a symbol.
 

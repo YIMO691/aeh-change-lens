@@ -107,7 +107,7 @@ class WorkerInputAssemblerTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        with self.assertRaisesRegex(SnapshotStaleError, "compilation context changed"):
+        with self.assertRaisesRegex(SnapshotStaleError, "snapshot changed|compilation context changed"):
             WorkerInputAssembler(self.resolver, self.root).assemble(binding, context, "STALE-CONTEXT")
 
     def test_excluded_assembly_cannot_be_sent_to_worker(self) -> None:

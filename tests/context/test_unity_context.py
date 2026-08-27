@@ -59,6 +59,8 @@ class UnityContextBuilderTests(unittest.TestCase):
         self.assertEqual("2022.3.62f1", first.unity_version)
         self.assertEqual(("FEATURE_X", "UNITY_EDITOR"), first.defines)
         self.assertEqual("Game", first.assembly.name)
+        self.assertEqual("Game.csproj", first.generated_project.path)
+        self.assertEqual(64, len(first.generated_project.sha256))
         self.assertEqual("Assets/Game/Game.asmdef", first.assembly.path)
         self.assertEqual("APPLICABLE", first.applicability.status)
         self.assertEqual(("Editor",), first.applicability.active_platforms)
@@ -76,6 +78,19 @@ class UnityContextBuilderTests(unittest.TestCase):
         after = UnityContextBuilder(self.root).build("Game")
         self.assertNotEqual(before.context_digest, after.context_digest)
         self.assertNotEqual(before.metadata_references[0].sha256, after.metadata_references[0].sha256)
+
+    def test_generated_project_byte_change_changes_context_digest(self) -> None:
+        before = UnityContextBuilder(self.root).build("Game")
+        project = self.root / "Game.csproj"
+        project.write_text(
+            project.read_text(encoding="utf-8") + "\n<!-- bound change -->\n",
+            encoding="utf-8",
+        )
+        after = UnityContextBuilder(self.root).build("Game")
+        self.assertNotEqual(before.context_digest, after.context_digest)
+        self.assertNotEqual(
+            before.generated_project.sha256, after.generated_project.sha256
+        )
 
     def test_duplicate_assembly_name_fails_closed(self) -> None:
         duplicate = self.root / "Assets/Other/Game.asmdef"

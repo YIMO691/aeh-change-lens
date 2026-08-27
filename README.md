@@ -43,6 +43,7 @@ change-lens snapshot <repository-root> --base <commit> --target WORKTREE --prett
 change-lens unity-context <unity-project-root> --assembly <name> --graph --pretty
 change-lens roslyn-input <repository-root> <unity-project-root> --assembly <name> --request-id <id>
 change-lens graph-diff <old-result.json> <new-result.json> --mapping-hints <hints.json> --pretty
+change-lens analyze-change <repository-root> <unity-project-relative-path> --assembly <name> --base <commit> --target WORKTREE --request-id <id> --pretty
 ```
 
 该命令只读取 Git 对象和工作树中的受支持源码，输出原/新版本的相对路径、对象 ID、逐文件 SHA-256、清单摘要和 rename 映射；不 checkout、不编译或执行目标项目代码。
@@ -50,6 +51,8 @@ change-lens graph-diff <old-result.json> <new-result.json> --mapping-hints <hint
 Roslyn Worker 的当前纵切可以提取类型、方法、调用、分支、异常、返回、状态读写、生命周期、Coroutine/yield、async/await、C# event/delegate、UnityEvent、序列化引用、组件查找和动态未知关系。Unity Context Builder 已执行 asmdef 平台、Define Constraints 与 Version Defines 判定，并将 Unity 版本、锁定包版本、依赖和 metadata 纳入摘要绑定。`graph-diff` 已能将 OLD/NEW Worker 图映射为确定性的新增、删除、更新、移动与不变链路；稳定符号可静态确认，人工重命名提示和唯一结构映射保持较低置信度，歧义候选不猜测。程序集图会递归跟随 ProjectReference，但 `Library/ScriptAssemblies` 输出在缺少源码快照来源证明时保持 `PROJECT_UNVERIFIED`。`roslyn-input` 只从已绑定的 Git/工作树快照取源码字节，并在装配前后检查 stale；ET6/Unity 2020.3 的只读试点已覆盖 UTF-8、UTF-8 BOM 和 GB18030 历史源码。
 
 `CL-GATE-02` 尚未通过：当前只有 1 套人工标注 Golden Change，尚未达到计划的 10–20 套；`ScriptAssemblies` 输出仍需建立可验证来源，状态读取仍不覆盖别名与运行时对象，事件移除和 Inspector 绑定尚未补齐；Viewer 也尚未实现。
+
+`analyze-change` 要求 OLD 与 NEW snapshot 各自包含生成的 `<Assembly>.csproj`。Unity 默认忽略且未提交的 csproj 不会被工具偷偷替换为当前工作树版本；这种情况会 fail closed，用户需要先导出/纳入可审计的编译清单。
 
 当前 Gate：
 

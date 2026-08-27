@@ -27,6 +27,8 @@
 - 真实 Unity metadata 中存在 `MonoBehaviour`、`UnityEventBase` 且上下文声明完整时，Unity 框架关系才允许升级为 `CONFIRMED_STATIC`。
 - Python `AnalyzerGraphDiffer` 合并 OLD/NEW Worker 结果，输出稳定符号、唯一结构和人工提示三类映射，以及节点/边的新增、删除、更新、移动和不变标签；
 - `graph-diff` CLI 输出受 `analyzer-diff.schema.json` 与 canonical digest 约束，歧义结构不会按行号猜测。
+- `analyze-change` 从 OLD/NEW SnapshotBinding 各自物化源码与生成 csproj，分别构建 Context、运行 Worker 并输出 `change-analysis.schema.json`；全过程不 checkout；
+- Unity Context 现在直接记录生成 csproj 的路径与 SHA-256，而不只记录其派生选项。
 
 ## 当前强制降级
 
@@ -43,18 +45,20 @@
 - 覆盖更多平台名称与非 registry 包版本变体；
 - 补充状态别名、事件移除、Inspector 绑定与组件 API 变体；
 - 将 Golden Change 从当前 1 套扩展到计划的 10–20 套；
-- 为真实 Git 历史版本绑定各自的 Unity 生成上下文，形成端到端双快照命令；
+- 为默认未提交/被忽略 csproj 的 Unity 仓库设计可审计编译清单导出流程；
 - 能力矩阵、性能与更多 adversarial cases。
 
 包版本已锁定在 `worker/ChangeLens.Analyzer/packages.lock.json`。Roslyn 包的官方来源为 [NuGet Gallery](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp/5.9.0)。
 
 ## ET6 只读试点
 
-在 `D:\ares\project\ET6\Unity` 的 Unity 2020.3.26f1c1 项目上，Context Builder 已读取 `Unity.Model`：140 个 define、221 个 metadata reference（其中 69 个 Unity reference）、632 个 Compile source、5 个 ProjectReference 和 48 个锁定包。递归图包含 6 个程序集和 12 条依赖，6 个程序集均判定为当前 Editor 上适用；这些程序集没有 Version Define 条目。632 个源码全部从含 9,328 个所选文件的工作树快照装配，其中 UTF-8 336、UTF-8 BOM 273、GB18030 23。
+在 `D:\ares\project\ET6\Unity` 的 Unity 2020.3.26f1c1 项目上，Context Builder 已读取 `Unity.Model`：140 个 define、221 个 metadata reference（其中 69 个 Unity reference）、632 个 Compile source、5 个 ProjectReference 和 48 个锁定包。递归图包含 6 个程序集和 12 条依赖，6 个程序集均判定为当前 Editor 上适用；这些程序集没有 Version Define 条目。632 个源码全部从含 9,352 个所选文件（包括 24 个 worktree csproj）的工作树快照装配，其中 UTF-8 336、UTF-8 BOM 273、GB18030 23。
 
 真实 metadata 合成样本中的生命周期、UnityEvent、协程启动和组件查找边达到 `CONFIRMED_STATIC`。实际 632 文件静态分析得到 22,382 个节点、18,874 条边，其中 `READS_STATE=9994`、`WRITES_STATE=251`、`AWAITS=12`、`DIRECT_CALL=1268`；由于 4 个项目程序集产物尚无来源绑定并产生 51 条诊断，结果仍正确为 `PARTIAL`。
 
 试点只读取项目和 Unity 安装目录；未 checkout、未启动 Unity、未编译或执行 ET6 项目代码。前后 Git status 均为 203 条，规范化内容 SHA-256 均为 `7c47c6fd1bce7f21375a4c965e6bcbb92ae937e765b84b30ea6af25432389228`。
+
+ET6 当前 worktree 的 `Unity.Model.csproj` 已绑定 SHA-256 `b3eb20ae7abf4c445e1dc6667b3751b31bff0d2131216dca5602da5f747d0e40`，但该文件不存在于 HEAD。严格 `analyze-change HEAD -> WORKTREE` 因而在运行 Worker 前 fail closed，没有用当前 csproj 冒充历史上下文。
 
 ## 第一套 OLD/NEW Golden Change
 

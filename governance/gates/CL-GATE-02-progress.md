@@ -35,6 +35,11 @@
 - stable symbol mapping, unique structural mapping and explicit reviewed mapping hints;
 - fail-closed mixed-revision/dangling-edge checks and no-guess ambiguous groups;
 - first real-Worker Golden Change compared against human annotation.
+- strict `analyze-change` OLD revision -> NEW revision/worktree pipeline;
+- per-lane temporary materialization of snapshot-bound csproj, asmdef, package/version
+  metadata and C# sources, with no checkout;
+- direct generated-csproj path/SHA-256 binding in Unity Context;
+- explicit failure when either lane lacks its revision-bound generated project.
 
 ## ET6 read-only measurements
 
@@ -48,16 +53,18 @@ version_defines=0
 source_files=632
 assembly_graph_nodes=6
 assembly_graph_edges=12
-selected_snapshot_files=9328
+selected_snapshot_files=9352
+selected_csproj_files=24
 assembled_source_files=632
 source_encodings=UTF-8:336,UTF-8-BOM:273,GB18030:23
 completeness=PARTIAL
 assembly_applicability=APPLICABLE
 active_platform=Editor
 applicable_graph_assemblies=6/6
-context_digest=b7967dc161ca186b396180f992bf44a6ddfd97a68b8748c2193afd52bf73bc4c
-assembly_graph_digest=45643bef7e5b8838a74019470e9d4f168d7d7e6628e9d366785cb29dfd228bd5
-snapshot_manifest=10a1311f07c1f30dbfae9ad084d72e1526c684fbbffc5f318cb57b47fc70f501
+generated_project_sha256=b3eb20ae7abf4c445e1dc6667b3751b31bff0d2131216dca5602da5f747d0e40
+context_digest=63bce75e9d0b244ad8e7d58834547e0b1f75ac43ca1b9a03e385937233018acb
+assembly_graph_digest=d5c5cc34e12e80c90b07b4d1ba51e5fca833aca61abd656ed3b1865dfedaecc6
+snapshot_manifest=f202d3bfc2c575512362b9904a3127799ce4c457366a7e638850c2dc86f8b3c3
 ```
 
 The graph recursively follows the five root `ProjectReference` entries. Four
@@ -113,7 +120,7 @@ Latest result:
 
 ```text
 Build succeeded: 0 warnings, 0 errors
-Ran 56 tests in 100.712s
+Ran 61 tests in 116.199s
 OK (skipped=1)
 ```
 
@@ -132,6 +139,11 @@ sha256=7c47c6fd1bce7f21375a4c965e6bcbb92ae937e765b84b30ea6af25432389228
 
 The count and digest are identical. No ET6 file was written, checked out,
 compiled, executed, staged, or cleaned.
+
+The worktree snapshot now binds 24 generated csproj files. ET6's
+`Unity/Unity.Model.csproj` is not present in HEAD, so strict
+`analyze-change HEAD -> WORKTREE` was intentionally rejected before Worker
+execution. No NEW configuration was substituted for OLD.
 
 ## OLD/NEW Golden measurement
 
@@ -166,6 +178,6 @@ remain unmapped and explicitly limited.
 - cover additional platform aliases and non-registry package-version forms;
 - add alias-aware state flow, event removal and Inspector bindings;
 - expand from 1 Golden Change to the planned 10–20 cases;
-- bind separate Unity generated contexts for historical Git revisions and expose
-  an end-to-end two-snapshot analysis command;
+- define a governed compile-manifest export for ordinary Unity repositories whose
+  generated csproj files are ignored and absent from history;
 - run performance and adversarial matrices.
