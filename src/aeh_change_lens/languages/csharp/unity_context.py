@@ -24,8 +24,12 @@ class MetadataReferenceBinding:
 
 @dataclass(frozen=True, slots=True)
 class GeneratedProjectBinding:
+    kind: str
     path: str
     sha256: str
+    origin_sha256: str
+    manifest_path: str | None
+    manifest_sha256: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,7 +238,12 @@ def _version_expression_matches(
 class UnityContextBuilder:
     """Read Unity-generated metadata without starting Unity or project code."""
 
-    def __init__(self, unity_project_root: str | os.PathLike[str]) -> None:
+    def __init__(
+        self,
+        unity_project_root: str | os.PathLike[str],
+        *,
+        portable_metadata_paths: bool = False,
+    ) -> None:
         supplied = Path(unity_project_root)
         if not supplied.exists() or _is_link_or_reparse(supplied):
             raise UnsafePathError("Unity project root is missing or is a link/reparse point")
@@ -242,11 +251,30 @@ class UnityContextBuilder:
         if not (root / "Assets").is_dir() or not (root / "ProjectSettings").is_dir():
             raise ValueError("expected a Unity project root containing Assets and ProjectSettings")
         self.root = root
+        self.portable_metadata_paths = portable_metadata_paths
         self._hash_cache: dict[tuple[str, int, int], str] = {}
 
-    def build(self, assembly_name: str) -> UnityCompilationContext:
+    def build(
+        self,
+        assembly_name: str,
+        *,
+        generated_project_kind: str = "GENERATED_CSPROJ",
+        generated_project_origin_sha256: str | None = None,
+        manifest_path: str | None = None,
+        manifest_sha256: str | None = None,
+    ) -> UnityCompilationContext:
         if not assembly_name or any(character in assembly_name for character in "/\\\x00"):
             raise ValueError("assembly_name must be a simple assembly name")
+        if generated_project_kind not in {"GENERATED_CSPROJ", "COMPILE_MANIFEST"}:
+            raise ValueError("unsupported generated project provenance")
+        if generated_project_kind == "GENERATED_CSPROJ" and (
+            manifest_path is not None or manifest_sha256 is not None
+        ):
+            raise ValueError("direct generated project cannot claim manifest provenance")
+        if generated_project_kind == "COMPILE_MANIFEST" and (
+            not manifest_path or not manifest_sha256 or not generated_project_origin_sha256
+        ):
+            raise ValueError("compile manifest provenance is incomplete")
         csproj = self.root / f"{assembly_name}.csproj"
         if not csproj.is_file() or _is_link_or_reparse(csproj):
             raise FileNotFoundError(f"generated Unity project is unavailable: {csproj.name}")
@@ -255,9 +283,14 @@ class UnityContextBuilder:
             document = ET.parse(csproj)
         except ET.ParseError as error:
             raise ValueError(f"invalid generated Unity project XML: {csproj.name}") from error
+        project_sha256 = self._hash_file(csproj)
         generated_project = GeneratedProjectBinding(
+            kind=generated_project_kind,
             path=csproj.relative_to(self.root).as_posix(),
-            sha256=self._hash_file(csproj),
+            sha256=project_sha256,
+            origin_sha256=generated_project_origin_sha256 or project_sha256,
+            manifest_path=manifest_path,
+            manifest_sha256=manifest_sha256,
         )
         assembly = self._assembly_definition(assembly_name)
         unity_version = self._unity_version()
@@ -626,6 +659,11 @@ class UnityContextBuilder:
             if _is_link_or_reparse(path):
                 raise UnsafePathError(f"metadata reference is a link/reparse point: {path}")
             normalized = os.fspath(path)
+            if self.portable_metadata_paths:
+                try:
+                    normalized = path.relative_to(self.root).as_posix()
+                except ValueError:
+                    pass
             kind = "UNITY" if path.name.casefold().startswith("unityengine") else "EXTERNAL"
             references[normalized.casefold()] = MetadataReferenceBinding(
                 path=normalized,

@@ -84,6 +84,10 @@ class SnapshotResolver:
             path in DEFAULT_EXACT_PATHS
             or path.endswith(DEFAULT_EXACT_SUFFIXES)
             or path.lower().endswith(DEFAULT_SOURCE_SUFFIXES)
+            or (
+                "/.aeh-change-lens/compile-manifests/" in f"/{path}"
+                and path.lower().endswith(".json")
+            )
         )
 
     def _commit_oid(self, revision: str) -> str:

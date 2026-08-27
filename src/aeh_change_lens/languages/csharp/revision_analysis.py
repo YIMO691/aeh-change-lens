@@ -10,9 +10,20 @@ from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Sequence
 
-from aeh_change_lens.snapshot import SnapshotBinding, SnapshotResolver, SnapshotStaleError
+from aeh_change_lens.snapshot import (
+    FileBinding,
+    SnapshotBinding,
+    SnapshotResolver,
+    SnapshotStaleError,
+)
 from aeh_change_lens.snapshot.security import normalize_repo_relative
 
+from .compile_manifest import (
+    CompileManifest,
+    CompileManifestExporter,
+    locate_manifest_references,
+    manifest_unity_path,
+)
 from .graph_diff import AnalyzerGraphDiffer, MappingHint
 from .unity_context import UnityCompilationContext, UnityContextBuilder
 from .worker_input import RoslynWorkerInput, WorkerInputAssembler, WorkerSourceInput
@@ -38,8 +49,12 @@ class RevisionWorkerAssembly:
     context_digest: str
     context_completeness: str
     unity_version: str | None
+    generated_project_kind: str
     generated_project_path: str
     generated_project_sha256: str
+    generated_project_origin_sha256: str
+    manifest_path: str | None
+    manifest_sha256: str | None
     source_files: int
     limitations: tuple[str, ...]
 
@@ -69,10 +84,21 @@ class RevisionWorkerInputAssembler:
             if (relative := self._relative_unity_path(item.path)) is not None
         }
         project_path = f"{assembly_name}.csproj"
-        if project_path not in bound_files:
+        compile_manifest: CompileManifest | None = None
+        manifest_path = manifest_unity_path(assembly_name)
+        manifest_binding = bound_files.get(manifest_path)
+        if project_path not in bound_files and manifest_binding is None:
             raise ValueError(
-                f"revision-bound generated Unity project is unavailable: {self._repo_path(project_path)}"
+                "revision-bound generated Unity project or compile manifest is unavailable: "
+                f"{self._repo_path(project_path)}"
             )
+        if project_path not in bound_files:
+            manifest_content = self.resolver.read_bound_bytes(binding, manifest_binding.path)
+            compile_manifest = CompileManifest.from_bytes(manifest_content)
+            if compile_manifest.assembly_name != assembly_name:
+                raise ValueError("compile manifest assembly does not match the requested assembly")
+            self._assert_manifest_sources(binding, compile_manifest, bound_files)
+            self._assert_worktree_manifest_matches_live(binding, compile_manifest)
 
         with tempfile.TemporaryDirectory(prefix="aeh-change-lens-revision-") as temporary:
             unity_root = Path(temporary) / "Unity"
@@ -82,9 +108,32 @@ class RevisionWorkerInputAssembler:
                 content = self.resolver.read_bound_bytes(binding, file_binding.path)
                 destination.write_bytes(content)
 
-            context = UnityContextBuilder(unity_root).build(assembly_name)
-            self._assert_context_bound(context, bound_files)
-            worker_input = self._assemble_sources(binding, context, bound_files, request_id)
+            reference_overrides: list[dict] | None = None
+            if compile_manifest is None:
+                context = UnityContextBuilder(unity_root).build(assembly_name)
+            else:
+                live_unity_root = self.resolver.repository_root / Path(
+                    PurePosixPath(self.unity_project_path)
+                )
+                located = locate_manifest_references(
+                    live_unity_root, assembly_name, compile_manifest.metadata_references
+                )
+                reference_overrides = self._materialize_manifest_project(
+                    unity_root, compile_manifest, located
+                )
+                context = UnityContextBuilder(
+                    unity_root, portable_metadata_paths=True
+                ).build(
+                    assembly_name,
+                    generated_project_kind="COMPILE_MANIFEST",
+                    generated_project_origin_sha256=compile_manifest.generated_project_sha256,
+                    manifest_path=manifest_path,
+                    manifest_sha256=manifest_binding.sha256,
+                )
+            self._assert_context_bound(context, bound_files, compile_manifest)
+            worker_input = self._assemble_sources(
+                binding, context, bound_files, request_id, reference_overrides
+            )
 
         self._assert_current(binding)
         return RevisionWorkerAssembly(
@@ -92,8 +141,12 @@ class RevisionWorkerInputAssembler:
             context_digest=context.context_digest,
             context_completeness=context.completeness,
             unity_version=context.unity_version,
+            generated_project_kind=context.generated_project.kind,
             generated_project_path=context.generated_project.path,
             generated_project_sha256=context.generated_project.sha256,
+            generated_project_origin_sha256=context.generated_project.origin_sha256,
+            manifest_path=context.generated_project.manifest_path,
+            manifest_sha256=context.generated_project.manifest_sha256,
             source_files=len(worker_input.source_files),
             limitations=context.limitations,
         )
@@ -102,8 +155,9 @@ class RevisionWorkerInputAssembler:
         self,
         binding: SnapshotBinding,
         context: UnityCompilationContext,
-        bound_files: dict[str, object],
+        bound_files: dict[str, FileBinding],
         request_id: str,
+        reference_overrides: list[dict] | None = None,
     ) -> RoslynWorkerInput:
         if context.assembly is None:
             raise ValueError("Unity context has no revision-bound assembly definition")
@@ -128,7 +182,7 @@ class RevisionWorkerInputAssembler:
             ))
         if not sources:
             raise ValueError("revision Unity context has no snapshot-bound C# source files")
-        references = [
+        references = reference_overrides if reference_overrides is not None else [
             asdict(item) for item in context.metadata_references
             if item.kind in {"UNITY", "EXTERNAL"}
         ]
@@ -148,16 +202,58 @@ class RevisionWorkerInputAssembler:
     @staticmethod
     def _assert_context_bound(
         context: UnityCompilationContext,
-        bound_files: dict[str, object],
+        bound_files: dict[str, FileBinding],
+        compile_manifest: CompileManifest | None,
     ) -> None:
         if context.assembly is None:
             raise ValueError("revision has no matching asmdef")
-        generated_project = bound_files.get(context.generated_project.path)
-        if (
-            generated_project is None or
-            generated_project.sha256 != context.generated_project.sha256
-        ):
-            raise SnapshotStaleError("generated Unity project is not bound by the selected snapshot")
+        if compile_manifest is None:
+            generated_project = bound_files.get(context.generated_project.path)
+            if (
+                generated_project is None or
+                generated_project.sha256 != context.generated_project.sha256
+            ):
+                raise SnapshotStaleError("generated Unity project is not bound by the selected snapshot")
+        else:
+            manifest_path = context.generated_project.manifest_path
+            manifest_file = bound_files.get(manifest_path or "")
+            if (
+                context.generated_project.kind != "COMPILE_MANIFEST" or
+                context.generated_project.sha256 != compile_manifest.canonical_project_sha256 or
+                context.generated_project.origin_sha256 != compile_manifest.generated_project_sha256 or
+                manifest_file is None or
+                manifest_file.sha256 != context.generated_project.manifest_sha256
+            ):
+                raise SnapshotStaleError("compile manifest provenance is not bound by the selected snapshot")
+            expected_sources = {item.path for item in compile_manifest.source_files}
+            if set(context.source_files) != expected_sources:
+                raise SnapshotStaleError("materialized compile manifest source set changed")
+            expected_projects = {
+                (
+                    item.include, item.assembly_name, item.reference_output_assembly,
+                    item.output_item_type,
+                )
+                for item in compile_manifest.project_references
+            }
+            actual_projects = {
+                (
+                    item.include, item.assembly_name, item.reference_output_assembly,
+                    item.output_item_type,
+                )
+                for item in context.project_references
+            }
+            if actual_projects != expected_projects:
+                raise SnapshotStaleError("materialized compile manifest project references changed")
+            expected_references = {
+                (item.name.casefold(), item.sha256, item.kind)
+                for item in compile_manifest.metadata_references
+            }
+            actual_references = {
+                (Path(item.path).name.casefold(), item.sha256, item.kind)
+                for item in context.metadata_references
+            }
+            if not actual_references.issubset(expected_references):
+                raise SnapshotStaleError("materialized compile manifest metadata references changed")
         assembly_file = bound_files.get(context.assembly.path)
         if assembly_file is None or assembly_file.sha256 != context.assembly.sha256:
             raise SnapshotStaleError("revision asmdef is not bound by the selected snapshot")
@@ -165,6 +261,80 @@ class RevisionWorkerInputAssembler:
             package_file = bound_files.get(context.package_manifest.path)
             if package_file is None or package_file.sha256 != context.package_manifest.sha256:
                 raise SnapshotStaleError("revision package lock is not bound by the selected snapshot")
+
+    def _assert_manifest_sources(
+        self,
+        binding_owner: SnapshotBinding,
+        manifest: CompileManifest,
+        bound_files: dict[str, FileBinding],
+    ) -> None:
+        for source in manifest.source_files:
+            binding = bound_files.get(source.path)
+            if binding is None:
+                raise SnapshotStaleError(
+                    f"compile manifest source digest mismatch: {source.path!r}"
+                )
+            content = self.resolver.read_bound_bytes(binding_owner, binding.path)
+            text, _ = WorkerInputAssembler._decode_source(content, binding.path)
+            semantic_text = text.replace("\r\n", "\n").replace("\r", "\n")
+            if hashlib.sha256(semantic_text.encode("utf-8")).hexdigest() != source.semantic_sha256:
+                raise SnapshotStaleError(
+                    f"compile manifest source digest mismatch: {source.path!r}"
+                )
+
+    def _assert_worktree_manifest_matches_live(
+        self,
+        binding: SnapshotBinding,
+        manifest: CompileManifest,
+    ) -> None:
+        if binding.commit_oid is not None:
+            return
+        live_project = (
+            self.resolver.repository_root / Path(PurePosixPath(self.unity_project_path)) /
+            f"{manifest.assembly_name}.csproj"
+        )
+        if not live_project.is_file():
+            return
+        current = CompileManifestExporter(
+            self.resolver.repository_root, self.unity_project_path
+        ).build(manifest.assembly_name)
+        if current.canonical_digest != manifest.canonical_digest:
+            raise SnapshotStaleError(
+                "worktree compile manifest does not match the live generated project"
+            )
+
+    @staticmethod
+    def _materialize_manifest_project(
+        unity_root: Path,
+        manifest: CompileManifest,
+        located: dict[tuple[str, str], Path],
+    ) -> list[dict]:
+        references: list[dict] = []
+        for reference in manifest.metadata_references:
+            key = (reference.name.casefold(), reference.sha256)
+            source = located.get(key)
+            if source is None:
+                continue
+            content = source.read_bytes()
+            if hashlib.sha256(content).hexdigest() != reference.sha256:
+                raise SnapshotStaleError(
+                    f"compile manifest reference changed during materialization: {reference.name!r}"
+                )
+            destination = (
+                unity_root / ".aeh-change-lens" / "references" /
+                reference.sha256 / reference.name
+            )
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(content)
+            references.append({
+                "path": os.fspath(source),
+                "sha256": reference.sha256,
+                "kind": reference.kind,
+            })
+        (unity_root / f"{manifest.assembly_name}.csproj").write_bytes(
+            manifest.project_bytes()
+        )
+        return references
 
     def _relative_unity_path(self, repo_path: str) -> str | None:
         if not self.unity_project_path:
@@ -319,8 +489,12 @@ class RevisionChangeAnalyzer:
             "completeness": assembly.context_completeness,
             "unity_version": assembly.unity_version,
             "generated_project": {
+                "kind": assembly.generated_project_kind,
                 "path": assembly.generated_project_path,
                 "sha256": assembly.generated_project_sha256,
+                "origin_sha256": assembly.generated_project_origin_sha256,
+                "manifest_path": assembly.manifest_path,
+                "manifest_sha256": assembly.manifest_sha256,
             },
             "source_files": assembly.source_files,
             "limitations": list(assembly.limitations),

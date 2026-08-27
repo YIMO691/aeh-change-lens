@@ -43,6 +43,7 @@ change-lens snapshot <repository-root> --base <commit> --target WORKTREE --prett
 change-lens unity-context <unity-project-root> --assembly <name> --graph --pretty
 change-lens roslyn-input <repository-root> <unity-project-root> --assembly <name> --request-id <id>
 change-lens graph-diff <old-result.json> <new-result.json> --mapping-hints <hints.json> --pretty
+change-lens export-compile-manifest <repository-root> <unity-project-relative-path> --assembly <name> --pretty
 change-lens analyze-change <repository-root> <unity-project-relative-path> --assembly <name> --base <commit> --target WORKTREE --request-id <id> --pretty
 ```
 
@@ -52,7 +53,7 @@ Roslyn Worker 的当前纵切可以提取类型、方法、调用、分支、异
 
 `CL-GATE-02` 尚未通过：当前只有 1 套人工标注 Golden Change，尚未达到计划的 10–20 套；`ScriptAssemblies` 输出仍需建立可验证来源，状态读取仍不覆盖别名与运行时对象，事件移除和 Inspector 绑定尚未补齐；Viewer 也尚未实现。
 
-`analyze-change` 要求 OLD 与 NEW snapshot 各自包含生成的 `<Assembly>.csproj`。Unity 默认忽略且未提交的 csproj 不会被工具偷偷替换为当前工作树版本；这种情况会 fail closed，用户需要先导出/纳入可审计的编译清单。
+`analyze-change` 要求 OLD 与 NEW snapshot 各自包含生成的 `<Assembly>.csproj`，或包含由 `export-compile-manifest` 预先导出并提交的 `.aeh-change-lens/compile-manifests/<Assembly>.json`。清单绑定 define、精确源码集合及语义哈希、metadata 文件名/哈希和 ProjectReference，不保存本机绝对 DLL 路径。源码变化后未重新导出会 fail closed；当前工作树 csproj 只能按文件名与 SHA-256 定位本机 DLL，不能向历史版本注入源码或编译选项。没有建立清单基线的旧提交仍不会被追溯猜测。
 
 当前 Gate：
 
@@ -84,6 +85,11 @@ Confirmed defaults for the first version:
 
 Implementation was explicitly authorized on 2026-08-27. Work proceeds one governed
 work package at a time; no release claim has been made.
+
+For Unity repositories that ignore generated csproj files,
+`export-compile-manifest` creates a portable, committable baseline. Historical
+analysis accepts that artifact only from the matching revision, rejects stale
+source semantics, and never substitutes NEW compile options for OLD.
 
 ## License
 

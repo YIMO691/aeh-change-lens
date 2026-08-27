@@ -8,7 +8,7 @@
 
 - A Git revision is resolved to an immutable commit OID and read with `git ls-tree` and `git cat-file`.
 - `WORKTREE` reads tracked and non-ignored untracked files without modifying the index.
-- The selector includes `*.cs`, `*.asmdef`, `*.csproj`, `ProjectSettings/ProjectVersion.txt`, `Packages/manifest.json`, and `Packages/packages-lock.json`.
+- The selector includes `*.cs`, `*.asmdef`, `*.csproj`, fixed-path `.aeh-change-lens/compile-manifests/*.json` artifacts, `ProjectSettings/ProjectVersion.txt`, `Packages/manifest.json`, and `Packages/packages-lock.json`.
 
 ## Digest semantics
 
@@ -32,5 +32,5 @@ A binding remains current only when both `tree_hash` and `source_manifest_hash` 
 - Git LFS content is not expanded; the resolver binds the bytes it actually reads.
 - Supplemental worktree rename detection confirms only unique byte-identical moves. Git rename detection or later semantic mapping handles modified moves.
 - Filenames must decode as UTF-8; failures are closed.
-- Ignored, untracked Unity-generated csproj files are not part of a worktree binding; historical analysis does not bypass that boundary.
+- Ignored, untracked Unity-generated csproj files are not part of a worktree binding. Historical analysis accepts only a compile manifest bound by the same revision and does not bypass that boundary.
 - This work package does not parse C# semantics.

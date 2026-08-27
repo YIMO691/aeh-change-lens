@@ -4,9 +4,11 @@ import argparse
 import json
 import sys
 from dataclasses import asdict
+from pathlib import Path
 
 from .languages.csharp import (
     AnalyzerGraphDiffer,
+    CompileManifestExporter,
     MappingHint,
     RevisionChangeAnalyzer,
     UnityContextBuilder,
@@ -61,6 +63,17 @@ def _parser() -> argparse.ArgumentParser:
     analyze_change.add_argument("--request-id", required=True)
     analyze_change.add_argument("--mapping-hints", help="可选的人工复核映射提示 JSON 数组")
     analyze_change.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
+    export_manifest = subcommands.add_parser(
+        "export-compile-manifest",
+        help="从当前 Unity 生成 csproj 导出可提交、可验证的编译清单",
+    )
+    export_manifest.add_argument("repository", help="Git 仓库根目录")
+    export_manifest.add_argument("unity_project", help="仓库内 Unity 项目的相对路径")
+    export_manifest.add_argument("--assembly", required=True, help="Assembly Definition name")
+    export_manifest.add_argument(
+        "--dry-run", action="store_true", help="只构建并验证清单，不写入工作区"
+    )
+    export_manifest.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
     return parser
 
 
@@ -135,6 +148,22 @@ def _analyze_change(arguments: argparse.Namespace) -> dict:
     )
 
 
+def _export_compile_manifest(arguments: argparse.Namespace) -> dict:
+    exporter = CompileManifestExporter(
+        Path(arguments.repository), arguments.unity_project
+    )
+    manifest = exporter.build(arguments.assembly)
+    unity_path = arguments.unity_project.replace("\\", "/").rstrip("/")
+    path = f"{unity_path}/.aeh-change-lens/compile-manifests/{arguments.assembly}.json"
+    if not arguments.dry_run:
+        path = exporter.write(manifest)
+    return {
+        "status": "VALIDATED" if arguments.dry_run else "EXPORTED",
+        "path": path,
+        "manifest": manifest.to_dict(),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     arguments = parser.parse_args(argv)
@@ -163,6 +192,8 @@ def main(argv: list[str] | None = None) -> int:
             result = _graph_diff(arguments)
         elif arguments.command == "analyze-change":
             result = _analyze_change(arguments)
+        elif arguments.command == "export-compile-manifest":
+            result = _export_compile_manifest(arguments)
         else:  # pragma: no cover - argparse prevents this branch
             parser.error(f"unsupported command: {arguments.command}")
     except (SnapshotError, FileNotFoundError, ValueError) as error:

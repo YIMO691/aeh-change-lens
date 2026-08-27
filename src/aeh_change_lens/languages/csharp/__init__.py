@@ -1,5 +1,6 @@
 """C# and Unity analysis support."""
 
+from .compile_manifest import CompileManifest, CompileManifestExporter, manifest_unity_path
 from .graph_diff import AnalyzerGraphDiff, AnalyzerGraphDiffer, MappingHint
 from .revision_analysis import (
     RevisionChangeAnalyzer,
@@ -11,8 +12,9 @@ from .unity_context import UnityAssemblyGraph, UnityCompilationContext, UnityCon
 from .worker_input import RoslynWorkerInput, WorkerInputAssembler
 
 __all__ = [
-    "AnalyzerGraphDiff", "AnalyzerGraphDiffer", "MappingHint", "RevisionChangeAnalyzer",
+    "AnalyzerGraphDiff", "AnalyzerGraphDiffer", "CompileManifest",
+    "CompileManifestExporter", "MappingHint", "RevisionChangeAnalyzer",
     "RevisionWorkerAssembly", "RevisionWorkerInputAssembler", "RoslynWorkerInput",
     "RoslynWorkerRunner", "UnityAssemblyGraph", "UnityCompilationContext",
-    "UnityContextBuilder", "WorkerInputAssembler",
+    "UnityContextBuilder", "WorkerInputAssembler", "manifest_unity_path",
 ]

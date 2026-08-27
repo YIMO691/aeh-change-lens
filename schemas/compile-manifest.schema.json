@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeh-change-lens.dev/schemas/compile-manifest.schema.json",
+  "title": "Portable digest-bound Unity compile manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "assembly_name", "generated_project_sha256",
+    "canonical_project_sha256", "defines", "source_files",
+    "metadata_references", "project_references", "canonical_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "assembly_name": {
+      "type": "string", "pattern": "^[A-Za-z0-9_.-]+$"
+    },
+    "generated_project_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "canonical_project_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "defines": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "source_files": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["path", "semantic_sha256"],
+        "properties": {
+          "path": {
+            "type": "string", "minLength": 1,
+            "pattern": "^(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+          },
+          "semantic_sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+        }
+      }
+    },
+    "metadata_references": {
+      "type": "array", "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["name", "sha256", "kind"],
+        "properties": {
+          "name": {
+            "type": "string", "minLength": 1,
+            "pattern": "^[^/\\\\]+$"
+          },
+          "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+          "kind": { "enum": ["UNITY", "EXTERNAL"] }
+        }
+      }
+    },
+    "project_references": {
+      "type": "array", "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": [
+          "include", "assembly_name", "reference_output_assembly", "output_item_type"
+        ],
+        "properties": {
+          "include": {
+            "type": "string", "minLength": 1,
+            "pattern": "^(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+          },
+          "assembly_name": {
+            "type": "string", "pattern": "^[A-Za-z0-9_.-]+$"
+          },
+          "reference_output_assembly": { "type": "boolean" },
+          "output_item_type": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "canonical_digest": { "$ref": "common.schema.json#/$defs/sha256" }
+  }
+}

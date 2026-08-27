@@ -28,7 +28,8 @@
 | OLD/NEW 结构映射 | 部分实现 | `STRUCTURAL` | 仅唯一 kind/label/path；歧义候选不猜测 |
 | 重命名/跨类型移动映射 | 部分实现 | `STRUCTURAL` | 需要人工复核 mapping hint；尚无自动相似度判断 |
 | Golden Change | 部分实现 | 人工标注 + 确定性摘要 | 当前 1 套，目标 10–20 套 |
-| 历史 Git 双上下文分析 | 部分实现 | snapshot-bound | 两侧必须各自包含生成 csproj；缺失时 fail closed |
+| 可提交 compile manifest | 已实现 | snapshot-bound | 需在基线和源码变化后导出；不追溯猜测旧提交 |
+| 历史 Git 双上下文分析 | 部分实现 | snapshot-bound | 每侧需有生成 csproj 或匹配源码的清单；引用缺失时 `PARTIAL` |
 
 Define Constraints 的求值规则遵循 [Unity 2020.3 Assembly Definition properties](https://docs.unity3d.com/2020.3/Documentation/Manual/class-AssemblyDefinitionImporter.html)：所有约束行必须成立，单行可使用 `||`，符号可用 `!` 否定。
 

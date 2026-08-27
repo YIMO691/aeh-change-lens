@@ -15,14 +15,48 @@
     "unity_version": { "type": ["string", "null"] },
     "generated_project": {
       "type": "object", "additionalProperties": false,
-      "required": ["path", "sha256"],
+      "required": [
+        "kind", "path", "sha256", "origin_sha256", "manifest_path", "manifest_sha256"
+      ],
       "properties": {
+        "kind": { "enum": ["GENERATED_CSPROJ", "COMPILE_MANIFEST"] },
         "path": {
           "type": "string",
           "pattern": "^(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+\\.csproj$"
         },
-        "sha256": { "$ref": "common.schema.json#/$defs/sha256" }
-      }
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "origin_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "manifest_path": {
+          "type": ["string", "null"],
+          "pattern": "^(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+\\.json$"
+        },
+        "manifest_sha256": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "GENERATED_CSPROJ" } } },
+          "then": {
+            "properties": {
+              "manifest_path": { "type": "null" },
+              "manifest_sha256": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "COMPILE_MANIFEST" } } },
+          "then": {
+            "properties": {
+              "manifest_path": { "type": "string" },
+              "manifest_sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+            }
+          }
+        }
+      ]
     },
     "assembly": {
       "oneOf": [

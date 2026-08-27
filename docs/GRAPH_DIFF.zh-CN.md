@@ -57,6 +57,13 @@ change-lens analyze-change D:\game-repo Unity `
   --pretty
 ```
 
-命令依次绑定 OLD/NEW snapshot、将每一侧的 `*.cs`、`*.asmdef`、`*.csproj`、ProjectVersion 和 package lock 验哈希后物化到独立临时目录、分别构建 Unity Context、运行仓库自带静态 Worker，再生成 Graph Diff。输出同时包含两个 revision manifest、Context digest、rename、policy 与最终 canonical digest。
+命令依次绑定 OLD/NEW snapshot、将每一侧的 `*.cs`、`*.asmdef`、生成 csproj 或 compile manifest、ProjectVersion 和 package lock 验哈希后物化到独立临时目录、分别构建 Unity Context、运行仓库自带静态 Worker，再生成 Graph Diff。输出同时包含两个 revision manifest、Context digest、编译输入 provenance、rename、policy 与最终 canonical digest。
 
-这是严格模式：每一侧必须包含 `<Assembly>.csproj`。若 Unity 默认忽略的生成 csproj 没有进入 Git revision 或未忽略 worktree，命令直接失败；它不会用 NEW csproj 代替 OLD，也不会启动 Unity 重新生成。绝对 metadata HintPath 指向的 DLL 仍逐字节验哈希，未绑定的相对产物只会形成 `PARTIAL`。
+若仓库忽略 Unity 生成 csproj，应在基线状态先运行并提交：
+
+```powershell
+change-lens export-compile-manifest D:\game-repo Unity --assembly Game.Runtime --pretty
+git add Unity/.aeh-change-lens/compile-manifests/Game.Runtime.json
+```
+
+每次源码集合或内容变化后重新导出。清单对源码使用换行归一化后的语义 SHA-256，同时 revision snapshot 仍绑定原始字节 SHA-256；因此 Git 的 CRLF/LF 转换不会制造伪 stale，其他源码变化仍会拒绝。metadata 只记录文件名、种类和 SHA-256，不泄露本机绝对路径；分析时当前 csproj 仅作为同哈希 DLL 的 locator。若某个 revision 同时缺少 csproj 与清单、清单摘要被改写或源码语义哈希不匹配，命令在 Worker 前 fail closed。工具不会用 NEW 编译选项代替 OLD，也不会启动 Unity。没有预先建立清单基线的旧提交不能事后猜测恢复。

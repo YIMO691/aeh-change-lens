@@ -16,10 +16,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from aeh_change_lens.cli import main  # noqa: E402
 from aeh_change_lens.languages.csharp import (  # noqa: E402
+    CompileManifestExporter,
     RevisionChangeAnalyzer,
     RevisionWorkerInputAssembler,
 )
-from aeh_change_lens.snapshot import SnapshotResolver  # noqa: E402
+from aeh_change_lens.snapshot import SnapshotResolver, SnapshotStaleError  # noqa: E402
 from tests.contract.test_contracts import validate  # noqa: E402
 
 
@@ -35,7 +36,14 @@ def git(root: Path, *arguments: str) -> str:
 
 
 class RevisionAnalysisRepository:
-    def __init__(self, root: Path, *, include_project: bool = True) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        include_project: bool = True,
+        ignore_project: bool = False,
+        export_manifest: bool = False,
+    ) -> None:
         self.root = root
         unity = root / "Unity"
         (unity / "Assets/Game").mkdir(parents=True)
@@ -56,6 +64,8 @@ class RevisionAnalysisRepository:
   <ItemGroup><Compile Include="Assets/Game/**/*.cs" /></ItemGroup>
 </Project>
 """, encoding="utf-8")
+        if ignore_project:
+            (root / ".gitignore").write_text("*.csproj\n", encoding="utf-8")
         self.source = unity / "Assets/Game/Counter.cs"
         self.source.write_text("""namespace RevisionFixture;
 public sealed class Counter
@@ -71,6 +81,9 @@ public sealed class Counter
         git(root, "init", "-q")
         git(root, "config", "user.name", "Change Lens Test")
         git(root, "config", "user.email", "change-lens@example.invalid")
+        if export_manifest:
+            exporter = CompileManifestExporter(root, "Unity")
+            exporter.write(exporter.build("Game"))
         git(root, "add", ".")
         git(root, "commit", "-qm", "base")
         self.base = git(root, "rev-parse", "HEAD")
@@ -192,6 +205,69 @@ class RevisionChangeAnalyzerTests(unittest.TestCase):
             ])
         self.assertEqual(2, exit_code)
         self.assertIn("revision-bound generated Unity project", error.getvalue())
+
+    def test_ignored_csproj_uses_revision_bound_compile_manifests(self) -> None:
+        repository = RevisionAnalysisRepository(
+            self.root, ignore_project=True, export_manifest=True
+        )
+        self.assertNotIn("Unity/Game.csproj", git(self.root, "ls-files").splitlines())
+        repository.modify_target()
+        exporter = CompileManifestExporter(self.root, "Unity")
+        exporter.write(exporter.build("Game"))
+        resolver = SnapshotResolver(self.root)
+
+        result = RevisionChangeAnalyzer(resolver, "Unity").analyze(
+            resolver.resolve_revision(repository.base, "OLD"),
+            resolver.resolve_worktree("NEW"),
+            "Game",
+            "MANIFEST-GOLDEN",
+        )
+
+        validate("change-analysis.schema.json", result)
+        self.assertEqual(
+            "COMPILE_MANIFEST", result["contexts"]["old"]["generated_project"]["kind"]
+        )
+        self.assertEqual(
+            "COMPILE_MANIFEST", result["contexts"]["new"]["generated_project"]["kind"]
+        )
+        self.assertNotEqual(
+            result["contexts"]["old"]["generated_project"]["manifest_sha256"],
+            result["contexts"]["new"]["generated_project"]["manifest_sha256"],
+        )
+        self.assertTrue(any(
+            node["kind"] == "CONDITION" and node["revision"] == "NEW"
+            for node in result["diff"]["nodes"]
+        ))
+
+    def test_stale_compile_manifest_source_digest_fails_closed(self) -> None:
+        repository = RevisionAnalysisRepository(
+            self.root, ignore_project=True, export_manifest=True
+        )
+        repository.modify_target()
+        resolver = SnapshotResolver(self.root)
+
+        with self.assertRaisesRegex(SnapshotStaleError, "compile manifest source digest"):
+            RevisionWorkerInputAssembler(resolver, "Unity").assemble(
+                resolver.resolve_worktree("NEW"), "Game", "STALE-MANIFEST"
+            )
+
+    def test_stale_worktree_manifest_options_fail_closed(self) -> None:
+        repository = RevisionAnalysisRepository(
+            self.root, ignore_project=True, export_manifest=True
+        )
+        project = self.root / "Unity/Game.csproj"
+        project.write_text(
+            project.read_text(encoding="utf-8").replace(
+                "UNITY_EDITOR", "UNITY_EDITOR;NEW_OPTION"
+            ),
+            encoding="utf-8",
+        )
+        resolver = SnapshotResolver(self.root)
+
+        with self.assertRaisesRegex(SnapshotStaleError, "live generated project"):
+            RevisionWorkerInputAssembler(resolver, "Unity").assemble(
+                resolver.resolve_worktree("NEW"), "Game", "STALE-OPTIONS"
+            )
 
 
 if __name__ == "__main__":

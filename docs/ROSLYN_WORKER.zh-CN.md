@@ -28,7 +28,9 @@
 - Python `AnalyzerGraphDiffer` 合并 OLD/NEW Worker 结果，输出稳定符号、唯一结构和人工提示三类映射，以及节点/边的新增、删除、更新、移动和不变标签；
 - `graph-diff` CLI 输出受 `analyzer-diff.schema.json` 与 canonical digest 约束，歧义结构不会按行号猜测。
 - `analyze-change` 从 OLD/NEW SnapshotBinding 各自物化源码与生成 csproj，分别构建 Context、运行 Worker 并输出 `change-analysis.schema.json`；全过程不 checkout；
-- Unity Context 现在直接记录生成 csproj 的路径与 SHA-256，而不只记录其派生选项。
+- `export-compile-manifest` 将生成 csproj 归一化为可提交清单：绑定基础 define、源码路径/语义哈希、metadata 文件名/哈希和 ProjectReference，不保存绝对路径；
+- 当 revision 缺少 csproj 时，`analyze-change` 只接受该 revision 固定路径下、canonical digest 有效且源码哈希匹配的清单；当前 csproj 仅能定位同名同哈希 DLL；
+- Unity Context 记录编译输入种类、物化项目 SHA-256、原始生成项目 SHA-256及 manifest 路径/哈希，而不只记录派生选项。
 
 ## 当前强制降级
 
@@ -45,7 +47,6 @@
 - 覆盖更多平台名称与非 registry 包版本变体；
 - 补充状态别名、事件移除、Inspector 绑定与组件 API 变体；
 - 将 Golden Change 从当前 1 套扩展到计划的 10–20 套；
-- 为默认未提交/被忽略 csproj 的 Unity 仓库设计可审计编译清单导出流程；
 - 能力矩阵、性能与更多 adversarial cases。
 
 包版本已锁定在 `worker/ChangeLens.Analyzer/packages.lock.json`。Roslyn 包的官方来源为 [NuGet Gallery](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp/5.9.0)。
@@ -59,6 +60,8 @@
 试点只读取项目和 Unity 安装目录；未 checkout、未启动 Unity、未编译或执行 ET6 项目代码。前后 Git status 均为 203 条，规范化内容 SHA-256 均为 `7c47c6fd1bce7f21375a4c965e6bcbb92ae937e765b84b30ea6af25432389228`。
 
 ET6 当前 worktree 的 `Unity.Model.csproj` 已绑定 SHA-256 `b3eb20ae7abf4c445e1dc6667b3751b31bff0d2131216dca5602da5f747d0e40`，但该文件不存在于 HEAD。严格 `analyze-change HEAD -> WORKTREE` 因而在运行 Worker 前 fail closed，没有用当前 csproj 冒充历史上下文。
+
+只读 dry-run 已从该 csproj 构造不落盘的 portable manifest：140 个基础 define、632 个源码、221 个 metadata reference 和 5 个 ProjectReference；JSON 不含 ET6 绝对路径。`canonical_project_sha256=867c661b3e8becf7fa6da7177a485d984f65d402112f900a26b1741285dd70da`，`canonical_digest=c389dc3058fb284c5c6cf15b3e68a08cd90823e4eedb975455e29f3a9ce2d88d`。这验证了未来基线导出能力，但不会把今天生成的清单伪装成已存在于 HEAD 的历史证据。
 
 ## 第一套 OLD/NEW Golden Change
 

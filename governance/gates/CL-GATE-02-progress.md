@@ -39,7 +39,13 @@
 - per-lane temporary materialization of snapshot-bound csproj, asmdef, package/version
   metadata and C# sources, with no checkout;
 - direct generated-csproj path/SHA-256 binding in Unity Context;
-- explicit failure when either lane lacks its revision-bound generated project.
+- explicit failure when either lane lacks both a revision-bound generated project
+  and a matching compile manifest.
+- deterministic `export-compile-manifest` for repositories that ignore generated csproj;
+- portable manifest bindings for base defines, exact source set/semantic hashes,
+  metadata names/hashes and ProjectReference entries, without absolute paths;
+- per-revision manifest canonical-digest and stale-source rejection;
+- hash-qualified use of a live csproj only as a local metadata DLL locator.
 
 ## ET6 read-only measurements
 
@@ -62,9 +68,15 @@ assembly_applicability=APPLICABLE
 active_platform=Editor
 applicable_graph_assemblies=6/6
 generated_project_sha256=b3eb20ae7abf4c445e1dc6667b3751b31bff0d2131216dca5602da5f747d0e40
-context_digest=63bce75e9d0b244ad8e7d58834547e0b1f75ac43ca1b9a03e385937233018acb
-assembly_graph_digest=d5c5cc34e12e80c90b07b4d1ba51e5fca833aca61abd656ed3b1865dfedaecc6
+context_digest=f23712dddd85303a242ce6b4bc03e8ec6adabf2960582eb74bc566bdca74edff
+assembly_graph_digest=27945ffd203825ad56d0a3ff2b8298272aa918d07efa9ebec4d6f3a536669cdd
 snapshot_manifest=f202d3bfc2c575512362b9904a3127799ce4c457366a7e638850c2dc86f8b3c3
+compile_manifest_defines=140
+compile_manifest_sources=632
+compile_manifest_metadata_references=221
+compile_manifest_project_references=5
+compile_manifest_project_sha256=867c661b3e8becf7fa6da7177a485d984f65d402112f900a26b1741285dd70da
+compile_manifest_digest=c389dc3058fb284c5c6cf15b3e68a08cd90823e4eedb975455e29f3a9ce2d88d
 ```
 
 The graph recursively follows the five root `ProjectReference` entries. Four
@@ -120,7 +132,7 @@ Latest result:
 
 ```text
 Build succeeded: 0 warnings, 0 errors
-Ran 61 tests in 116.199s
+Ran 69 tests in 114.643s
 OK (skipped=1)
 ```
 
@@ -144,6 +156,12 @@ The worktree snapshot now binds 24 generated csproj files. ET6's
 `Unity/Unity.Model.csproj` is not present in HEAD, so strict
 `analyze-change HEAD -> WORKTREE` was intentionally rejected before Worker
 execution. No NEW configuration was substituted for OLD.
+
+A read-only compile-manifest dry run successfully normalized the current
+`Unity.Model.csproj` without writing ET6 or embedding its absolute path. This
+establishes the prospective baseline workflow; because HEAD contains neither
+the csproj nor a previously committed manifest, the tool still refuses to
+retroactively invent HEAD compilation evidence.
 
 ## OLD/NEW Golden measurement
 
@@ -178,6 +196,4 @@ remain unmapped and explicitly limited.
 - cover additional platform aliases and non-registry package-version forms;
 - add alias-aware state flow, event removal and Inspector bindings;
 - expand from 1 Golden Change to the planned 10–20 cases;
-- define a governed compile-manifest export for ordinary Unity repositories whose
-  generated csproj files are ignored and absent from history;
 - run performance and adversarial matrices.
