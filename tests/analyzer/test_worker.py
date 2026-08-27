@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import tempfile
 import unittest
+import sys
 from pathlib import Path
 
-from tests.contract.test_contracts import validate
-
-
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "src"))
+
+from tests.contract.test_contracts import validate  # noqa: E402
+from aeh_change_lens.languages.csharp import UnityContextBuilder  # noqa: E402
+
+
 PROJECT = ROOT / "worker" / "ChangeLens.Analyzer" / "ChangeLens.Analyzer.csproj"
 DLL = ROOT / "worker" / "ChangeLens.Analyzer" / "bin" / "Release" / "net8.0" / "ChangeLens.Analyzer.dll"
 
@@ -40,7 +45,7 @@ def worker_input() -> dict:
             "completeness": "PARTIAL",
             "unity_version": "2022.3.62f1",
             "defines": ["UNITY_2022_3_OR_NEWER"],
-            "references": ["fixture-source-stubs"],
+            "references": [],
         },
         "source_files": sources,
     }
@@ -140,6 +145,58 @@ class RoslynWorkerTests(unittest.TestCase):
         self.assertEqual(2, completed.returncode)
         self.assertEqual("FAILED", json.loads(completed.stderr)["status"])
 
+
+@unittest.skipUnless(os.environ.get("CHANGE_LENS_UNITY_PROJECT"), "real Unity pilot not configured")
+class RealUnityMetadataWorkerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        if not DLL.exists():
+            subprocess.run(
+                ["dotnet", "build", str(PROJECT), "--configuration", "Release"],
+                cwd=ROOT,
+                check=True,
+            )
+
+    def test_real_unity_metadata_can_confirm_framework_relations(self) -> None:
+        unity_root = Path(os.environ["CHANGE_LENS_UNITY_PROJECT"])
+        assembly = os.environ.get("CHANGE_LENS_UNITY_ASSEMBLY", "Unity.Model")
+        context = UnityContextBuilder(unity_root).build(assembly)
+        content = """using UnityEngine;
+using UnityEngine.Events;
+public sealed class PilotBehaviour : MonoBehaviour
+{
+    public UnityEvent changed;
+    private void Awake() { changed.Invoke(); }
+}
+"""
+        payload = {
+            "schema_version": "1.0.0",
+            "request_id": "REAL-UNITY-METADATA",
+            "revision": "NEW",
+            "unity_context": {
+                "completeness": "COMPLETE",
+                "unity_version": context.unity_version,
+                "defines": list(context.defines),
+                "references": [
+                    {"path": item.path, "sha256": item.sha256, "kind": item.kind}
+                    for item in context.metadata_references if item.kind == "UNITY"
+                ],
+            },
+            "source_files": [{
+                "path": "Assets/Pilot/PilotBehaviour.cs",
+                "content": content,
+                "content_hash": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            }],
+        }
+        validate("analyzer-worker-input.schema.json", payload)
+        completed = run_worker(payload)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        result = json.loads(completed.stdout)
+        self.assertEqual("COMPLETE", result["status"], result["diagnostics"])
+        framework = {"FRAMEWORK_LIFECYCLE", "INVOKES_UNITY_EVENT"}
+        related = [edge for edge in result["edges"] if edge["relation"] in framework]
+        self.assertEqual(framework, {edge["relation"] for edge in related})
+        self.assertTrue(all(edge["provenance"]["confidence"] == "CONFIRMED_STATIC" for edge in related))
 
 if __name__ == "__main__":
     unittest.main()

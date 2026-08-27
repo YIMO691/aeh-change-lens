@@ -40,7 +40,9 @@ change-lens snapshot <repository-root> --base <commit> --target WORKTREE --prett
 
 该命令只读取 Git 对象和工作树中的受支持源码，输出原/新版本的相对路径、对象 ID、逐文件 SHA-256、清单摘要和 rename 映射；不 checkout、不编译或执行目标项目代码。
 
-Roslyn Worker 的首个纵切已经能从内存源码提取类型、方法、调用、分支、异常、返回、状态写入、生命周期、UnityEvent、序列化引用和动态未知关系。它尚未加载真实 Unity 元数据程序集，因此会强制返回 `PARTIAL`，不构成 `CL-GATE-02` 完成声明；Viewer 也尚未实现。
+Roslyn Worker 的首个纵切已经能从内存源码提取类型、方法、调用、分支、异常、返回、状态写入、生命周期、UnityEvent、序列化引用和动态未知关系。Unity Context Builder 可以读取 `.asmdef`、Unity 版本、生成的 `.csproj`、define、Compile glob 和 metadata reference，并对真实 DLL 做 SHA-256 绑定；ET6/Unity 2020.3 的只读试点已验证真实 Unity 生命周期关系可以达到 `CONFIRMED_STATIC`。
+
+`CL-GATE-02` 尚未通过：程序集 ProjectReference 仍需递归装载，Coroutine/async/delegate/event/component 能力和 OLD/NEW Golden Graph 尚未补齐；Viewer 也尚未实现。
 
 当前 Gate：
 

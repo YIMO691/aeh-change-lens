@@ -15,24 +15,32 @@
 - Unity 生命周期、UnityEvent、`[SerializeField]` 引用；
 - `SendMessage` 显式输出 `DYNAMIC_DISPATCH_UNKNOWN / UNKNOWN`；
 - 节点、边、位置、来源与置信度确定性排序。
+- Unity Context Builder 读取 `.asmdef`、ProjectVersion、生成的 `.csproj`、define、Compile glob、ProjectReference 与 metadata HintPath；
+- metadata DLL 在进入 Worker 前后均以 SHA-256 校验，symlink/reparse point 被拒绝；
+- 真实 Unity metadata 中存在 `MonoBehaviour`、`UnityEventBase` 且上下文声明完整时，Unity 框架关系才允许升级为 `CONFIRMED_STATIC`。
 
 ## 当前强制降级
 
-Worker 目前只加载 .NET 平台元数据和调用方提供的内存源码；测试中的 Unity 类型是受控 stub，不是 Unity 官方程序集。因此：
+使用受控 Unity stub 或缺少真实 metadata 时：
 
-- 即使调用方声称上下文 `COMPLETE`，输出能力仍强制为 `PARTIAL`；
+- 即使调用方声称上下文 `COMPLETE`，只要缺少 digest-bound `UnityEngine.CoreModule.dll` 或关键 Unity 符号，输出仍强制为 `PARTIAL`；
 - Unity 生命周期、UnityEvent 和序列化引用最多为 `STRUCTURAL`；
 - 普通 C# 内部调用在 Roslyn 唯一解析时可以是 `CONFIRMED_STATIC`；
 - `SendMessage`、Inspector 绑定和其他动态目标不能升级为静态确认。
 
 ## `CL-GATE-02` 仍缺少
 
-- 从 `.asmdef` 构建程序集边界；
-- 加载真实 Unity reference assemblies，并绑定文件摘要；
-- 平台/define 分支与 Assembly Definition constraints；
+- 递归解析 `.asmdef` 与生成 csproj 的 ProjectReference，形成完整程序集依赖图；
+- 将实际程序集源码按 snapshot binding 送入 Worker，而不是直接读取工作树；
+- 执行平台/define 与 Assembly Definition constraints 的适用性判定；
 - Coroutine、`async/await`、delegate/C# event、组件查找的完整关系；
 - OLD/NEW 两套 Golden Graph 与人工标注逐项比对；
 - 能力矩阵、性能与更多 adversarial cases。
 
 包版本已锁定在 `worker/ChangeLens.Analyzer/packages.lock.json`。Roslyn 包的官方来源为 [NuGet Gallery](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp/5.9.0)。
 
+## ET6 只读试点
+
+在 `D:\ares\project\ET6\Unity` 的 Unity 2020.3.26f1c1 项目上，Context Builder 已读取 `Unity.Model`：140 个 define、221 个 metadata reference（其中 69 个 Unity reference）、632 个 Compile source 和 5 个 ProjectReference。真实 `MonoBehaviour`/`UnityEvent` 合成样本通过 Worker，生命周期与 UnityEvent 边为 `CONFIRMED_STATIC`。由于 5 个 ProjectReference 尚未递归加载，实际 `Unity.Model` 上下文仍正确标记为 `PARTIAL`。
+
+试点只读取项目和 Unity 安装目录；未 checkout、未启动 Unity、未编译或执行 ET6 项目代码，前后 Git status 指纹一致。

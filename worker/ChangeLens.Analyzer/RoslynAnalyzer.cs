@@ -30,13 +30,17 @@ internal static class RoslynAnalyzer
         var compilation = CSharpCompilation.Create(
             $"ChangeLens_{input.RequestId}",
             trees,
-            PlatformReferences(),
+            PlatformReferences().Concat(BoundReferences(input.UnityContext.References)),
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-        // Source stubs make semantic tests possible, but they are not
-        // authoritative Unity metadata assemblies. This slice must therefore
-        // never advertise complete Unity context.
-        var effectiveUnityContext = input.UnityContext.Completeness == "MISSING" ? "MISSING" : "PARTIAL";
+        var hasBoundUnityCore = input.UnityContext.References.Any(reference =>
+            reference.Kind == "UNITY" &&
+            Path.GetFileName(reference.Path).Equals("UnityEngine.CoreModule.dll", StringComparison.OrdinalIgnoreCase));
+        var hasUnitySymbols = compilation.GetTypeByMetadataName("UnityEngine.MonoBehaviour") is not null &&
+            compilation.GetTypeByMetadataName("UnityEngine.Events.UnityEventBase") is not null;
+        var effectiveUnityContext = input.UnityContext.Completeness == "COMPLETE" && hasBoundUnityCore && hasUnitySymbols
+            ? "COMPLETE"
+            : input.UnityContext.Completeness == "MISSING" ? "MISSING" : "PARTIAL";
         var state = new AnalysisState(input, compilation, effectiveUnityContext);
         state.IndexDeclarations(trees);
         state.AnalyzeRelations(trees);
@@ -52,13 +56,16 @@ internal static class RoslynAnalyzer
                 Array.Empty<string>()));
         }
 
-        state.Diagnostics.Add(new AnalyzerDiagnostic(
-            "CL-CS-CTX-001",
-            "WARNING",
-            "当前 Worker 尚未加载权威 Unity 元数据程序集，框架关系保持部分/结构置信度。",
-            input.SourceFiles.Select(file => file.ContentHash).ToArray()));
+        if (effectiveUnityContext != "COMPLETE")
+        {
+            state.Diagnostics.Add(new AnalyzerDiagnostic(
+                "CL-CS-CTX-001",
+                "WARNING",
+                "Unity metadata、asmdef 或工程引用上下文不完整，框架关系保持部分/结构置信度。",
+                input.SourceFiles.Select(file => file.ContentHash).ToArray()));
+        }
 
-        const string status = "PARTIAL";
+        var status = effectiveUnityContext == "COMPLETE" && compilerErrors.Length == 0 ? "COMPLETE" : "PARTIAL";
         return new AnalyzerOutput(
             "1.0.0",
             input.RequestId,
@@ -110,6 +117,29 @@ internal static class RoslynAnalyzer
         var trusted = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string
             ?? throw new InvalidDataException("Trusted platform assemblies are unavailable.");
         return trusted.Split(Path.PathSeparator).Select(path => MetadataReference.CreateFromFile(path));
+    }
+
+    private static IEnumerable<MetadataReference> BoundReferences(IEnumerable<MetadataReferenceInput> references)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var reference in references)
+        {
+            if (reference.Kind is not ("UNITY" or "EXTERNAL") || !Path.IsPathFullyQualified(reference.Path) ||
+                !reference.Path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Invalid metadata reference descriptor.");
+            var path = Path.GetFullPath(reference.Path);
+            if (!seen.Add(path))
+                continue;
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                throw new InvalidDataException("Metadata reference is missing or is a reparse point.");
+            using var stream = info.OpenRead();
+            var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            if (!CryptographicOperations.FixedTimeEquals(
+                Encoding.ASCII.GetBytes(actual), Encoding.ASCII.GetBytes(reference.Sha256)))
+                throw new InvalidDataException($"metadata reference digest mismatch: {info.Name}");
+            yield return MetadataReference.CreateFromFile(path);
+        }
     }
 
     private sealed class AnalysisState

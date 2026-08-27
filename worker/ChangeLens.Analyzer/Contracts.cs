@@ -13,7 +13,9 @@ internal sealed record UnityContext(
     string Completeness,
     string? UnityVersion,
     IReadOnlyList<string> Defines,
-    IReadOnlyList<string> References);
+    IReadOnlyList<MetadataReferenceInput> References);
+
+internal sealed record MetadataReferenceInput(string Path, string Sha256, string Kind);
 
 internal sealed record SourceFile(string Path, string Content, string ContentHash);
 
@@ -71,4 +73,3 @@ internal sealed record AnalyzerDiagnostic(
 [JsonSerializable(typeof(AnalyzerOutput))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower)]
 internal partial class WorkerJsonContext : JsonSerializerContext;
-

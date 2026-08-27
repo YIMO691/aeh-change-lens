@@ -17,7 +17,19 @@
         "completeness": { "enum": ["COMPLETE", "PARTIAL", "MISSING"] },
         "unity_version": { "type": ["string", "null"] },
         "defines": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
-        "references": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "sha256", "kind"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+              "kind": { "enum": ["UNITY", "EXTERNAL"] }
+            }
+          }
+        }
       }
     },
     "source_files": {
@@ -40,4 +52,3 @@
     }
   }
 }
-

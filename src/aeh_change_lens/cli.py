@@ -5,6 +5,7 @@ import json
 import sys
 from dataclasses import asdict
 
+from .languages.csharp import UnityContextBuilder
 from .snapshot import SnapshotResolver
 from .snapshot.errors import SnapshotError
 
@@ -20,6 +21,10 @@ def _parser() -> argparse.ArgumentParser:
     snapshot.add_argument("--base", required=True, help="原版本 Git revision")
     snapshot.add_argument("--target", default="WORKTREE", help="新版本 Git revision 或 WORKTREE")
     snapshot.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
+    unity_context = subcommands.add_parser("unity-context", help="读取 asmdef 与 Unity 生成 csproj 上下文")
+    unity_context.add_argument("unity_project", help="Unity 项目根目录")
+    unity_context.add_argument("--assembly", required=True, help="Assembly Definition name")
+    unity_context.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
     return parser
 
 
@@ -45,9 +50,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if arguments.command == "snapshot":
             result = _snapshot(arguments)
+        elif arguments.command == "unity-context":
+            result = UnityContextBuilder(arguments.unity_project).build(arguments.assembly).to_dict()
         else:  # pragma: no cover - argparse prevents this branch
             parser.error(f"unsupported command: {arguments.command}")
-    except SnapshotError as error:
+    except (SnapshotError, FileNotFoundError, ValueError) as error:
         print(json.dumps({"status": "FAILED", "error": str(error)}, ensure_ascii=False), file=sys.stderr)
         return 2
     indent = 2 if arguments.pretty else None
@@ -57,4 +64,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
