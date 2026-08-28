@@ -136,6 +136,23 @@ class SnapshotResolverTests(unittest.TestCase):
         self.assertEqual("Assets/Renamed.cs", renames[0].new_path)
         self.assertEqual(100, renames[0].similarity)
 
+    def test_scoped_change_binding_includes_modified_and_untracked_csharp(self) -> None:
+        self.repository.write("Assets/A.cs", "class A { public int Value => 2; }\n")
+        self.repository.write("Assets/B.cs", "class B {}\n")
+
+        paths = self.resolver.changed_csharp_paths(self.repository.base)
+        old = self.resolver.resolve_revision_paths(self.repository.base, "OLD", paths)
+        new = self.resolver.resolve_worktree_paths("NEW", paths)
+
+        self.assertEqual(("Assets/A.cs", "Assets/B.cs"), paths)
+        self.assertEqual(["Assets/A.cs"], [item.path for item in old.files])
+        self.assertEqual(
+            ["Assets/A.cs", "Assets/B.cs"], [item.path for item in new.files]
+        )
+        self.assertTrue(self.resolver.revision_path_exists(self.repository.base, "Assets/A.cs"))
+        self.assertFalse(self.resolver.revision_path_exists(self.repository.base, "Assets/B.cs"))
+        self.assertTrue(self.resolver.worktree_path_exists("Assets/B.cs"))
+
     def test_requires_exact_repository_root(self) -> None:
         with self.assertRaises(InvalidRepositoryError):
             SnapshotResolver(self.root / "Assets")

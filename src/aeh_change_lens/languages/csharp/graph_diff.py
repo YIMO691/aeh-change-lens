@@ -66,7 +66,10 @@ class AnalyzerGraphDiffer:
         *,
         renames: Iterable[object] = (),
         mapping_hints: Sequence[MappingHint] = (),
+        stable_symbol_confidence: str = "CONFIRMED_STATIC",
     ) -> AnalyzerGraphDiff:
+        if stable_symbol_confidence not in {"CONFIRMED_STATIC", "STRUCTURAL"}:
+            raise ValueError("stable symbol confidence must be CONFIRMED_STATIC or STRUCTURAL")
         old_nodes, old_edges = self._validate_result(old_result, "OLD")
         new_nodes, new_edges = self._validate_result(new_result, "NEW")
         rename_map = self._rename_map(renames)
@@ -119,7 +122,7 @@ class AnalyzerGraphDiffer:
                 old_node,
                 new_node,
                 "MOVED" if moved else "SAME_SYMBOL",
-                "CONFIRMED_STATIC",
+                stable_symbol_confidence,
                 ["roslyn_symbol_identity", "source_path_changed" if moved else "same_qualified_symbol"],
                 "MOVED" if moved else "UNCHANGED_CONTEXT",
             )

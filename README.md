@@ -77,6 +77,23 @@ change-lens explain D:\GameRepo Unity `
   --pretty
 ```
 
+若历史 revision 没有匹配的 `.csproj` 或 compile manifest，严格模式会在完整快照分析前快速拒绝。需要先理解当前改动时，可以显式生成低置信度报告：
+
+```powershell
+change-lens explain D:\GameRepo Unity `
+  --assembly Unity.Model `
+  --base HEAD `
+  --target WORKTREE `
+  --request-id CHANGE-001 `
+  --analysis-output change-analysis.json `
+  --output change-story.html `
+  --allow-syntax-partial `
+  --progress `
+  --pretty
+```
+
+该模式只分析仓库内已变更的 C# 文件，状态固定为 `PARTIAL`；不注入当前编译选项、不冒充完整程序集语义。建立 revision-bound 基线后应重新运行严格模式。
+
 不安装 Python 包也可以从源码仓库调用：
 
 ```powershell

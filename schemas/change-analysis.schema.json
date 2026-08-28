@@ -65,7 +65,7 @@
       ],
       "properties": {
         "context_digest": { "$ref": "common.schema.json#/$defs/sha256" },
-        "completeness": { "enum": ["COMPLETE", "PARTIAL"] },
+        "completeness": { "enum": ["COMPLETE", "PARTIAL", "MISSING"] },
         "unity_version": { "type": ["string", "null"] },
         "generated_project": {
           "type": "object", "additionalProperties": false,
@@ -73,10 +73,20 @@
             "kind", "path", "sha256", "origin_sha256", "manifest_path", "manifest_sha256"
           ],
           "properties": {
-            "kind": { "enum": ["GENERATED_CSPROJ", "COMPILE_MANIFEST"] },
-            "path": { "type": "string", "minLength": 1 },
-            "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
-            "origin_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+            "kind": { "enum": ["GENERATED_CSPROJ", "COMPILE_MANIFEST", "SYNTAX_ONLY"] },
+            "path": { "type": ["string", "null"], "minLength": 1 },
+            "sha256": {
+              "oneOf": [
+                { "$ref": "common.schema.json#/$defs/sha256" },
+                { "type": "null" }
+              ]
+            },
+            "origin_sha256": {
+              "oneOf": [
+                { "$ref": "common.schema.json#/$defs/sha256" },
+                { "type": "null" }
+              ]
+            },
             "manifest_path": { "type": ["string", "null"] },
             "manifest_sha256": {
               "oneOf": [
@@ -90,6 +100,9 @@
               "if": { "properties": { "kind": { "const": "GENERATED_CSPROJ" } } },
               "then": {
                 "properties": {
+                  "path": { "type": "string", "minLength": 1 },
+                  "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+                  "origin_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
                   "manifest_path": { "type": "null" },
                   "manifest_sha256": { "type": "null" }
                 }
@@ -99,14 +112,29 @@
               "if": { "properties": { "kind": { "const": "COMPILE_MANIFEST" } } },
               "then": {
                 "properties": {
+                  "path": { "type": "string", "minLength": 1 },
+                  "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+                  "origin_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
                   "manifest_path": { "type": "string" },
                   "manifest_sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+                }
+              }
+            },
+            {
+              "if": { "properties": { "kind": { "const": "SYNTAX_ONLY" } } },
+              "then": {
+                "properties": {
+                  "path": { "type": "null" },
+                  "sha256": { "type": "null" },
+                  "origin_sha256": { "type": "null" },
+                  "manifest_path": { "type": "null" },
+                  "manifest_sha256": { "type": "null" }
                 }
               }
             }
           ]
         },
-        "source_files": { "type": "integer", "minimum": 1 },
+        "source_files": { "type": "integer", "minimum": 0 },
         "limitations": {
           "type": "array", "uniqueItems": true,
           "items": { "type": "string", "minLength": 1 }

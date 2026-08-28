@@ -42,6 +42,16 @@ change-lens render-report change-analysis.json `
   --pretty
 ```
 
+### 缺少历史编译基线
+
+严格模式会先检查 OLD/NEW 是否各自拥有 revision-bound `.csproj` 或 compile manifest，缺失时立即拒绝，不再先扫描整个源码闭包。若当前目标只是理解已有改动，可显式添加：
+
+```text
+--allow-syntax-partial --progress
+```
+
+此时报告固定标记为 `PARTIAL`，只包含仓库内已变更 C# 文件的 Roslyn syntax/局部符号子图。它不会使用当前工作树的编译选项解释 OLD，也不会把结构调用、跨程序集或 Unity 动态关系标成完整静态事实。
+
 `--source-root` 只用于为 NEW 工作树位置生成本地文件链接。OLD 位置保持为 revision/path/line 文本；当 NEW 也是不可变 Git revision 时也不生成本地链接，避免把当前工作树文件冒充历史源码。
 
 ## 来源证据

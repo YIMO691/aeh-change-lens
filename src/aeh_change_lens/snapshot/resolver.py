@@ -104,6 +104,146 @@ class SnapshotResolver:
             raise GitReadError("resolved commit object ID is not hexadecimal")
         return result.lower()
 
+    def revision_path_exists(self, revision: str, path: str) -> bool:
+        """Check one exact Git path without enumerating or hashing the revision."""
+        commit_oid = self._commit_oid(revision)
+        normalized = normalize_repo_relative(path)
+        listing = self._git(
+            "ls-tree", "-z", "--full-tree", commit_oid, "--", normalized
+        )
+        for record in listing.split(b"\x00"):
+            if not record:
+                continue
+            metadata, raw_path = record.split(b"\t", 1)
+            mode, object_type, _ = metadata.decode("ascii").split(" ", 2)
+            candidate = normalize_repo_relative(raw_path.decode("utf-8"))
+            if candidate == normalized:
+                if mode == "120000":
+                    raise UnsafePathError(f"Git symlink source is forbidden: {normalized!r}")
+                return object_type == "blob"
+        return False
+
+    def worktree_path_exists(self, path: str) -> bool:
+        """Check whether one exact path is visible to the read-only worktree snapshot."""
+        normalized = normalize_repo_relative(path)
+        listing = self._git(
+            "ls-files", "-z", "--cached", "--others", "--exclude-standard",
+            "--", normalized,
+        )
+        visible = {
+            normalize_repo_relative(item.decode("utf-8"))
+            for item in listing.split(b"\x00") if item
+        }
+        if normalized not in visible:
+            return False
+        candidate = secure_worktree_path(self.repository_root, normalized)
+        return candidate.is_file()
+
+    def changed_csharp_paths(
+        self, old_revision: str, new_revision: str = "WORKTREE"
+    ) -> tuple[str, ...]:
+        """Return the bounded C# change set without scanning the repository source closure."""
+        old_commit = self._commit_oid(old_revision)
+        arguments = ["diff", "--name-status", "-z", "--find-renames", old_commit]
+        if new_revision != "WORKTREE":
+            arguments.append(self._commit_oid(new_revision))
+        arguments.append("--")
+        fields = self._git(*arguments).split(b"\x00")
+        paths: set[str] = set()
+        index = 0
+        while index < len(fields) and fields[index]:
+            status = fields[index].decode("ascii")
+            index += 1
+            path_count = 2 if status.startswith(("R", "C")) else 1
+            if index + path_count > len(fields):
+                raise GitReadError("malformed changed-path record from git diff")
+            for raw_path in fields[index:index + path_count]:
+                path = normalize_repo_relative(raw_path.decode("utf-8"))
+                if path.lower().endswith(".cs"):
+                    paths.add(path)
+            index += path_count
+        if new_revision == "WORKTREE":
+            untracked = self._git("ls-files", "-z", "--others", "--exclude-standard", "--")
+            for raw_path in untracked.split(b"\x00"):
+                if not raw_path:
+                    continue
+                path = normalize_repo_relative(raw_path.decode("utf-8"))
+                if path.lower().endswith(".cs"):
+                    paths.add(path)
+        return tuple(sorted(paths))
+
+    def resolve_revision_paths(
+        self, revision: str, role: RevisionRole, paths: Sequence[str]
+    ) -> SnapshotBinding:
+        """Bind only explicitly selected paths for a declared PARTIAL analysis."""
+        commit_oid = self._commit_oid(revision)
+        tree_oid = self._git("rev-parse", f"{commit_oid}^{{tree}}").decode("ascii").strip().lower()
+        raw_tree = self._git("cat-file", "tree", tree_oid)
+        files: list[FileBinding] = []
+        for raw_path in sorted(set(paths)):
+            path = normalize_repo_relative(raw_path)
+            if not self._selected(path):
+                continue
+            listing = self._git("ls-tree", "-z", "--full-tree", commit_oid, "--", path)
+            records = [item for item in listing.split(b"\x00") if item]
+            if not records:
+                continue
+            metadata, listed_path = records[0].split(b"\t", 1)
+            mode, object_type, object_oid = metadata.decode("ascii").split(" ", 2)
+            candidate = normalize_repo_relative(listed_path.decode("utf-8"))
+            if candidate != path or object_type != "blob":
+                continue
+            if mode == "120000":
+                raise UnsafePathError(f"Git symlink source is forbidden: {path!r}")
+            content = self._git("cat-file", "blob", object_oid)
+            files.append(FileBinding(
+                path=path,
+                byte_size=len(content),
+                sha256=_sha256(content),
+                git_blob_oid=object_oid.lower(),
+            ))
+        return self._binding(
+            role=role,
+            revision=commit_oid,
+            commit_oid=commit_oid,
+            tree_oid=tree_oid,
+            tree_hash=_sha256(raw_tree),
+            dirty=False,
+            files=files,
+        )
+
+    def resolve_worktree_paths(
+        self, role: RevisionRole, paths: Sequence[str]
+    ) -> SnapshotBinding:
+        """Bind only explicitly selected worktree paths for a declared PARTIAL analysis."""
+        files: list[FileBinding] = []
+        for raw_path in sorted(set(paths)):
+            path = normalize_repo_relative(raw_path)
+            if not self._selected(path):
+                continue
+            candidate = secure_worktree_path(self.repository_root, path)
+            if not candidate.exists():
+                continue
+            if not candidate.is_file():
+                raise UnsafePathError(f"selected worktree path is not a file: {path!r}")
+            content = candidate.read_bytes()
+            files.append(FileBinding(
+                path=path,
+                byte_size=len(content),
+                sha256=_sha256(content),
+                git_blob_oid=None,
+            ))
+        manifest_hash = self._manifest_hash(files)
+        return self._binding(
+            role=role,
+            revision="WORKTREE",
+            commit_oid=None,
+            tree_oid=None,
+            tree_hash=manifest_hash,
+            dirty=self._worktree_is_dirty(),
+            files=files,
+        )
+
     def resolve_revision(self, revision: str, role: RevisionRole) -> SnapshotBinding:
         commit_oid = self._commit_oid(revision)
         tree_oid = self._git("rev-parse", f"{commit_oid}^{{tree}}").decode("ascii").strip().lower()
@@ -170,7 +310,13 @@ class SnapshotResolver:
             files=files,
         )
 
-    def detect_renames(self, old_revision: str, new_revision: str = "WORKTREE") -> tuple[RenameBinding, ...]:
+    def detect_renames(
+        self,
+        old_revision: str,
+        new_revision: str = "WORKTREE",
+        *,
+        supplement_untracked_exact: bool = True,
+    ) -> tuple[RenameBinding, ...]:
         old_commit = self._commit_oid(old_revision)
         arguments = ["diff", "--name-status", "-z", "--find-renames", old_commit]
         if new_revision != "WORKTREE":
@@ -199,7 +345,7 @@ class SnapshotResolver:
                     )
             else:
                 index += 1
-        if new_revision == "WORKTREE":
+        if new_revision == "WORKTREE" and supplement_untracked_exact:
             # Git intentionally omits untracked files from `git diff`. Supplement
             # its rename detection with unique, exact content matches while
             # keeping the index untouched.

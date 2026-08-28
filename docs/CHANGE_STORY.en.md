@@ -31,6 +31,10 @@ change-lens render-report change-analysis.json `
   --output change-story.html
 ```
 
+### Missing historical compile baseline
+
+Strict mode preflights revision-bound `.csproj`/compile manifests before scanning the full source closure. Add `--allow-syntax-partial --progress` only when an explicit lower-confidence report is useful. The resulting report is always `PARTIAL` and contains only the Roslyn syntax/local-symbol subgraph of changed C# files. Current worktree options are never injected into OLD.
+
 The optional Unity source root creates local links only for NEW worktree locations. OLD locations and immutable NEW revisions remain revision/path/line evidence so the current file is never presented as historical source.
 
 ## Evidence layers

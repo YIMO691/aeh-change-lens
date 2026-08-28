@@ -24,6 +24,12 @@ class CodexSkillIntegrationTests(unittest.TestCase):
         self.assertFalse(metadata["policy"]["allow_implicit_invocation"])
         self.assertIn("$aeh-change-lens", metadata["interface"]["default_prompt"])
         self.assertIn("Never run `export-compile-manifest`", instructions)
+        self.assertIn("--allow-syntax-partial", instructions)
+
+        workflow = (SKILL / "references/workflow.md").read_text(encoding="utf-8")
+        self.assertIn("D:\\ares2\\project\\ET6", workflow)
+        self.assertIn("--allow-syntax-partial", workflow)
+        self.assertIn("--progress", workflow)
 
     def test_source_checkout_runner_needs_no_package_install(self) -> None:
         completed = subprocess.run(
