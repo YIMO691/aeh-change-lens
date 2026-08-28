@@ -352,17 +352,26 @@ class ChangeStoryBuilder:
         self, diff: Mapping[str, object], nodes: Mapping[str, dict], edges: Sequence[dict], mappings: Sequence[dict]
     ) -> list[dict]:
         summary = diff["summary"]
+        source_status = diff.get("source_status")
+        summary_confirmed = bool(
+            diff.get("status") == "COMPLETE"
+            and isinstance(source_status, Mapping)
+            and source_status.get("old") == source_status.get("new") == "COMPLETE"
+        )
         claims = [{
             "claim_id": "claim:code:summary", "layer": "CODE_FACT",
             "statement_zh": (
-                f"静态分析确认新增 {summary['added_nodes']} 个、删除 {summary['removed_nodes']} 个图节点，"
+                ("静态分析确认" if summary_confirmed else "PARTIAL 结构分析显示")
+                + f"新增 {summary['added_nodes']} 个、删除 {summary['removed_nodes']} 个图节点，"
                 f"新增 {summary['added_edges']} 条、删除 {summary['removed_edges']} 条关系。"
             ),
             "statement_en": (
-                f"Static analysis found {summary['added_nodes']} added and {summary['removed_nodes']} removed "
+                ("Static analysis confirmed " if summary_confirmed else "PARTIAL structural analysis found ")
+                + f"{summary['added_nodes']} added and {summary['removed_nodes']} removed "
                 f"graph nodes, plus {summary['added_edges']} added and {summary['removed_edges']} removed relationships."
             ),
-            "confidence": "CONFIRMED_STATIC", "evidence_refs": [str(diff["canonical_digest"])],
+            "confidence": "CONFIRMED_STATIC" if summary_confirmed else "STRUCTURAL",
+            "evidence_refs": [str(diff["canonical_digest"])],
         }]
         for index, mapping in enumerate(sorted(mappings, key=lambda item: item["mapping_id"])):
             if mapping["kind"] not in {"RENAMED", "MOVED", "RENAMED_AND_MOVED"}:

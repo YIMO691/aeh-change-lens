@@ -227,3 +227,33 @@ remain unmapped and explicitly limited.
 - expand from 1 Golden Change to the planned 10–20 cases;
 - validate Change Story comprehension and navigation on larger real gameplay changes;
 - run performance and adversarial matrices.
+
+## 2026-08-28 usability increment: explicit syntax-only fallback
+
+This is progress evidence only. It does not close `CL-GATE-02` or upgrade the
+semantic analyzer's acceptance status.
+
+- strict `analyze-change` and `explain` now perform a fast baseline preflight
+  and still fail closed when either revision lacks immutable compile evidence;
+- `--allow-syntax-partial` is an explicit, read-only fallback limited to changed
+  C# files, with progress emitted on stderr and machine-readable JSON preserved
+  on stdout;
+- fallback output is always `PARTIAL`: graph nodes, edges and mappings are
+  capped at `STRUCTURAL`, and the report states that defines, metadata and Unity
+  compilation context are missing;
+- the Codex Skill, bilingual user documentation and schema contract were updated
+  to expose the same strict-versus-fallback boundary;
+- the full local suite passed 93 tests with 4 platform-dependent skips, and the
+  .NET Worker built with 0 warnings and 0 errors.
+
+A private, read-only Ares2 ET6 pilot completed in approximately 12.6 seconds.
+It bound 20 changed C# paths and produced an offline Change Story outside the
+target repository. The target Git-status fingerprint was identical before and
+after (`487230d058e693939b492d556f0f91cfb317e44e54f230a689d92958da07aa1e`),
+and no analyzer output was written into the target. The resulting analysis was
+schema-valid and contained zero `CONFIRMED_STATIC` nodes, edges or mappings.
+
+This fallback improves immediate comprehension when historical manifests do
+not exist; it does not retroactively create revision-bound semantic evidence.
+Future strict analysis still requires compile manifests captured for both
+revisions before the change is evaluated.

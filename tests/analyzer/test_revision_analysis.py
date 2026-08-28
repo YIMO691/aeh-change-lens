@@ -243,6 +243,80 @@ class RevisionChangeAnalyzerTests(unittest.TestCase):
         self.assertEqual(2, exit_code)
         self.assertIn("revision-bound generated Unity project", error.getvalue())
 
+    def test_explicit_syntax_partial_fallback_writes_report_without_baseline(self) -> None:
+        repository = RevisionAnalysisRepository(self.root, include_project=False)
+        repository.modify_target()
+        report_path = self.root.parent / f"{self.root.name}-syntax-partial.html"
+        analysis_path = self.root.parent / f"{self.root.name}-syntax-partial.json"
+        self.addCleanup(report_path.unlink, missing_ok=True)
+        self.addCleanup(analysis_path.unlink, missing_ok=True)
+        before = git(self.root, "status", "--porcelain=v1", "--untracked-files=all")
+        output = io.StringIO()
+        progress = io.StringIO()
+
+        with redirect_stdout(output), redirect_stderr(progress):
+            exit_code = main([
+                "explain", os.fspath(self.root), "Unity",
+                "--assembly", "Game", "--base", repository.base,
+                "--target", "WORKTREE", "--request-id", "SYNTAX-PARTIAL",
+                "--analysis-output", os.fspath(analysis_path),
+                "--output", os.fspath(report_path),
+                "--allow-syntax-partial", "--progress", "--pretty",
+            ])
+
+        self.assertEqual(0, exit_code, progress.getvalue())
+        result = json.loads(output.getvalue())
+        analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+        validate("change-analysis.schema.json", analysis)
+        self.assertEqual("PARTIAL", result["status"])
+        self.assertEqual("PARTIAL", analysis["status"])
+        self.assertEqual("SYNTAX_ONLY", analysis["contexts"]["old"]["generated_project"]["kind"])
+        self.assertEqual("MISSING", analysis["contexts"]["new"]["completeness"])
+        self.assertTrue(any(
+            "syntax-only PARTIAL" in item for item in analysis["limitations"]
+        ))
+        self.assertFalse(any(
+            item["provenance"]["confidence"] == "CONFIRMED_STATIC"
+            for collection in ("nodes", "edges")
+            for item in analysis["diff"][collection]
+        ))
+        self.assertFalse(any(
+            item["confidence"] == "CONFIRMED_STATIC"
+            for item in analysis["diff"]["mappings"]
+        ))
+        self.assertIn("预检 OLD/NEW revision 编译基线", progress.getvalue())
+        self.assertIn("生成 Change Story HTML", progress.getvalue())
+        rendered = report_path.read_text(encoding="utf-8")
+        self.assertIn("PARTIAL", rendered)
+        self.assertIn("PARTIAL 结构分析显示", rendered)
+        self.assertNotIn("CODE_FACT · CONFIRMED_STATIC", rendered)
+        self.assertEqual(
+            before, git(self.root, "status", "--porcelain=v1", "--untracked-files=all")
+        )
+
+    def test_missing_baseline_preflight_fails_before_full_snapshot_resolution(self) -> None:
+        repository = RevisionAnalysisRepository(self.root, include_project=False)
+        repository.modify_target()
+        original = SnapshotResolver.resolve_revision
+
+        def forbidden_full_resolution(*args, **kwargs):
+            raise AssertionError("full snapshot resolution must not run before baseline failure")
+
+        SnapshotResolver.resolve_revision = forbidden_full_resolution
+        try:
+            error = io.StringIO()
+            with redirect_stderr(error):
+                exit_code = main([
+                    "analyze-change", os.fspath(self.root), "Unity",
+                    "--assembly", "Game", "--base", repository.base,
+                    "--request-id", "FAST-PREFLIGHT",
+                ])
+        finally:
+            SnapshotResolver.resolve_revision = original
+
+        self.assertEqual(2, exit_code)
+        self.assertIn("--allow-syntax-partial", error.getvalue())
+
     def test_ignored_csproj_uses_revision_bound_compile_manifests(self) -> None:
         repository = RevisionAnalysisRepository(
             self.root, ignore_project=True, export_manifest=True

@@ -60,6 +60,23 @@ change-lens explain D:\GameRepo Unity `
   --pretty
 ```
 
+Strict mode preflights revision-bound projects/manifests before hashing the full source closure. When a historical lane has no baseline, an explicit structural fallback is available:
+
+```powershell
+change-lens explain D:\GameRepo Unity `
+  --assembly Unity.Model `
+  --base HEAD `
+  --target WORKTREE `
+  --request-id CHANGE-001 `
+  --analysis-output change-analysis.json `
+  --output change-story.html `
+  --allow-syntax-partial `
+  --progress `
+  --pretty
+```
+
+This mode analyzes only changed C# files in the repository and is always `PARTIAL`. It does not inject current compile options into OLD or claim complete assembly semantics.
+
 Run directly from the source checkout without installing the package:
 
 ```powershell

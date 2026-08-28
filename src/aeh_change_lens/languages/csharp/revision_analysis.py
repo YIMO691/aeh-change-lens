@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
-from typing import Sequence
+from typing import Callable, Sequence
 
 from aeh_change_lens.snapshot import (
     FileBinding,
@@ -60,13 +60,83 @@ class RevisionWorkerAssembly:
     context_completeness: str
     unity_version: str | None
     generated_project_kind: str
-    generated_project_path: str
-    generated_project_sha256: str
-    generated_project_origin_sha256: str
+    generated_project_path: str | None
+    generated_project_sha256: str | None
+    generated_project_origin_sha256: str | None
     manifest_path: str | None
     manifest_sha256: str | None
     source_files: int
     limitations: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RevisionBaselineAvailability:
+    strict_ready: bool
+    old_ready: bool
+    new_ready: bool
+    old_candidates: tuple[str, str]
+    new_candidates: tuple[str, str]
+
+    @property
+    def missing_lanes(self) -> tuple[str, ...]:
+        missing: list[str] = []
+        if not self.old_ready:
+            missing.append("OLD")
+        if not self.new_ready:
+            missing.append("NEW")
+        return tuple(missing)
+
+
+class RevisionBaselinePreflight:
+    """Check revision-bound compile inputs before expensive snapshot hashing."""
+
+    def __init__(
+        self,
+        resolver: SnapshotResolver,
+        unity_project_path: str,
+    ) -> None:
+        normalized = normalize_repo_relative(unity_project_path)
+        self.resolver = resolver
+        self.unity_project_path = "" if normalized == "." else normalized.rstrip("/")
+
+    def inspect(
+        self,
+        old_revision: str,
+        new_revision: str,
+        assembly_name: str,
+    ) -> RevisionBaselineAvailability:
+        project = self._repo_path(f"{assembly_name}.csproj")
+        manifest = self._repo_path(manifest_unity_path(assembly_name))
+        old_candidates = (project, manifest)
+        new_candidates = (project, manifest)
+        old_ready = any(
+            self.resolver.revision_path_exists(old_revision, path)
+            for path in old_candidates
+        )
+        if new_revision == "WORKTREE":
+            new_ready = any(
+                self.resolver.worktree_path_exists(path)
+                for path in new_candidates
+            )
+        else:
+            new_ready = any(
+                self.resolver.revision_path_exists(new_revision, path)
+                for path in new_candidates
+            )
+        return RevisionBaselineAvailability(
+            strict_ready=old_ready and new_ready,
+            old_ready=old_ready,
+            new_ready=new_ready,
+            old_candidates=old_candidates,
+            new_candidates=new_candidates,
+        )
+
+    def _repo_path(self, unity_path: str) -> str:
+        if not self.unity_project_path:
+            return normalize_repo_relative(unity_path)
+        return normalize_repo_relative(
+            (PurePosixPath(self.unity_project_path) / unity_path).as_posix()
+        )
 
 
 class RevisionWorkerInputAssembler:
@@ -607,13 +677,20 @@ class RevisionChangeAnalyzer:
         *,
         renames: Sequence[object] = (),
         mapping_hints: Sequence[MappingHint] = (),
+        progress: Callable[[str], None] | None = None,
     ) -> dict:
         if not request_id or "\x00" in request_id:
             raise ValueError("request_id is empty or contains NUL")
+        notify = progress or (lambda _: None)
+        notify("装配 OLD revision 编译上下文")
         old = self.assembler.assemble(old_binding, assembly_name, f"{request_id}-OLD")
+        notify("装配 NEW revision 编译上下文")
         new = self.assembler.assemble(new_binding, assembly_name, f"{request_id}-NEW")
+        notify("运行 OLD Roslyn 分析")
         old_result = self.worker_runner.run(old.worker_input)
+        notify("运行 NEW Roslyn 分析")
         new_result = self.worker_runner.run(new.worker_input)
+        notify("计算 OLD/NEW 图差异")
         diff = AnalyzerGraphDiffer().compare(
             old_result, new_result, renames=renames, mapping_hints=mapping_hints
         ).to_dict()
@@ -651,6 +728,185 @@ class RevisionChangeAnalyzer:
             "limitations": limitations,
         }
         return {**semantic, "canonical_digest": _canonical_digest(semantic)}
+
+    def analyze_syntax_partial(
+        self,
+        old_binding: SnapshotBinding,
+        new_binding: SnapshotBinding,
+        request_id: str,
+        *,
+        renames: Sequence[object] = (),
+        mapping_hints: Sequence[MappingHint] = (),
+        missing_baseline_lanes: Sequence[str] = (),
+        progress: Callable[[str], None] | None = None,
+    ) -> dict:
+        """Analyze only changed C# files with no compile-context claims.
+
+        This path is deliberately explicit and always PARTIAL. It never supplies
+        current compile options, metadata, or Unity defines to the OLD lane.
+        """
+        if not request_id or "\x00" in request_id:
+            raise ValueError("request_id is empty or contains NUL")
+        notify = progress or (lambda _: None)
+        notify("装配 OLD 变更 C# 子图")
+        old = self._syntax_only_assembly(old_binding, f"{request_id}-OLD")
+        notify("装配 NEW 变更 C# 子图")
+        new = self._syntax_only_assembly(new_binding, f"{request_id}-NEW")
+        if old.source_files == new.source_files == 0:
+            raise ValueError("syntax-only fallback found no changed C# source files")
+        notify("运行 OLD syntax-only Roslyn 分析")
+        old_result = (
+            self.worker_runner.run(old.worker_input)
+            if old.source_files else self._empty_worker_result(f"{request_id}-OLD")
+        )
+        notify("运行 NEW syntax-only Roslyn 分析")
+        new_result = (
+            self.worker_runner.run(new.worker_input)
+            if new.source_files else self._empty_worker_result(f"{request_id}-NEW")
+        )
+        old_result = self._structuralize_worker_result(old_result)
+        new_result = self._structuralize_worker_result(new_result)
+        notify("计算 PARTIAL OLD/NEW 图差异")
+        diff = AnalyzerGraphDiffer().compare(
+            old_result,
+            new_result,
+            renames=renames,
+            mapping_hints=mapping_hints,
+            stable_symbol_confidence="STRUCTURAL",
+        ).to_dict()
+        self._assert_scoped_current(old_binding)
+        self._assert_scoped_current(new_binding)
+        missing = ", ".join(sorted(set(missing_baseline_lanes))) or "OLD/NEW"
+        limitations = sorted(set(
+            [f"OLD: {item}" for item in old.limitations]
+            + [f"NEW: {item}" for item in new.limitations]
+            + list(diff["limitations"])
+            + [
+                f"{missing} 缺少 revision-bound 编译基线；报告使用显式 syntax-only PARTIAL 模式。",
+                "仅分析仓库内已变更的 C# 文件；未变更依赖、完整程序集边界、Unity define 和 metadata 未纳入。",
+                "调用和类型关系最多为结构证据，不得解释为完整 Roslyn 编译语义或运行时路径。",
+            ]
+        ))
+        semantic = {
+            "schema_version": "1.0.0",
+            "request_id": request_id,
+            "status": "PARTIAL",
+            "revisions": {
+                "old": self._revision_projection(old_binding),
+                "new": self._revision_projection(new_binding),
+            },
+            "renames": [
+                asdict(item) if not isinstance(item, dict) else dict(item)
+                for item in renames
+            ],
+            "contexts": {
+                "old": self._context_projection(old),
+                "new": self._context_projection(new),
+            },
+            "diff": diff,
+            "policy": {
+                "network_access": "DENY",
+                "execute_project_code": False,
+                "checkout": False,
+            },
+            "limitations": limitations,
+        }
+        return {**semantic, "canonical_digest": _canonical_digest(semantic)}
+
+    def _syntax_only_assembly(
+        self, binding: SnapshotBinding, request_id: str
+    ) -> RevisionWorkerAssembly:
+        sources: list[WorkerSourceInput] = []
+        for file_binding in binding.files:
+            if not file_binding.path.lower().endswith(".cs"):
+                continue
+            content = self.resolver.read_bound_bytes(binding, file_binding.path)
+            text, source_encoding = WorkerInputAssembler._decode_source(
+                content, file_binding.path
+            )
+            sources.append(WorkerSourceInput(
+                path=file_binding.path,
+                content=text,
+                content_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                snapshot_content_hash=file_binding.sha256,
+                source_encoding=source_encoding,
+            ))
+        worker_input = RoslynWorkerInput(
+            schema_version="1.0.0",
+            request_id=request_id,
+            revision=binding.role,
+            unity_context={
+                "completeness": "MISSING",
+                "unity_version": None,
+                "defines": [],
+                "references": [],
+            },
+            source_files=tuple(sources),
+        )
+        context_semantic = {
+            "mode": "SYNTAX_ONLY",
+            "revision": binding.role,
+            "source_manifest_hash": binding.source_manifest_hash,
+            "source_files": len(sources),
+        }
+        limitation = (
+            "未使用生成 csproj 或 compile manifest；仅对已变更 C# 文件执行 Roslyn syntax/局部符号分析。"
+        )
+        return RevisionWorkerAssembly(
+            worker_input=worker_input,
+            context_digest=_canonical_digest(context_semantic),
+            context_completeness="MISSING",
+            unity_version=None,
+            generated_project_kind="SYNTAX_ONLY",
+            generated_project_path=None,
+            generated_project_sha256=None,
+            generated_project_origin_sha256=None,
+            manifest_path=None,
+            manifest_sha256=None,
+            source_files=len(sources),
+            limitations=(limitation,),
+        )
+
+    def _assert_scoped_current(self, binding: SnapshotBinding) -> None:
+        for file_binding in binding.files:
+            self.resolver.read_bound_bytes(binding, file_binding.path)
+
+    @staticmethod
+    def _empty_worker_result(request_id: str) -> dict:
+        return {
+            "schema_version": "1.0.0",
+            "request_id": request_id,
+            "status": "PARTIAL",
+            "capabilities": {
+                "syntax": True,
+                "semantic_model": False,
+                "unity_context": "MISSING",
+            },
+            "nodes": [],
+            "edges": [],
+            "diagnostics": [{
+                "code": "CL-CS-SYNTAX-EMPTY",
+                "severity": "WARNING",
+                "message_zh": "该 revision 在变更范围内没有 C# 源文件。",
+                "source_ids": [],
+            }],
+        }
+
+    @staticmethod
+    def _structuralize_worker_result(result: dict) -> dict:
+        structural = json.loads(json.dumps(result, ensure_ascii=False))
+        for collection in ("nodes", "edges"):
+            for item in structural.get(collection, []):
+                provenance = item.get("provenance")
+                if (
+                    isinstance(provenance, dict)
+                    and provenance.get("confidence") == "CONFIRMED_STATIC"
+                ):
+                    provenance["confidence"] = "STRUCTURAL"
+                    limitations = provenance.get("limitations")
+                    if isinstance(limitations, list):
+                        limitations.append("syntax-only confidence ceiling")
+        return structural
 
     @staticmethod
     def _revision_projection(binding: SnapshotBinding) -> dict:

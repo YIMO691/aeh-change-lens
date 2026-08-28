@@ -25,6 +25,7 @@
 | ScriptAssemblies 来源绑定 | 部分实现 | `PROJECT_ATTESTED` | 可证明 revision 输入/输出哈希闭包；仍是外部 Unity 构建声明，不是可复现构建 |
 | Inspector UnityEvent 绑定 | 未实现 | `UNKNOWN` | 需要序列化资产或运行时证据 |
 | OLD/NEW 稳定符号映射 | 已实现 | `CONFIRMED_STATIC` | 仅类型/方法的同一 Roslyn 限定符号 |
+| 缺编译基线时的变更 C# 子图 | 已实现（显式） | `STRUCTURAL / PARTIAL` | 需 `--allow-syntax-partial`；不含完整程序集、define、metadata 或未变更依赖 |
 | OLD/NEW 结构映射 | 部分实现 | `STRUCTURAL` | 仅唯一 kind/label/path；歧义候选不猜测 |
 | 重命名/跨类型移动映射 | 部分实现 | `STRUCTURAL` | 需要人工复核 mapping hint；尚无自动相似度判断 |
 | Golden Change | 部分实现 | 人工标注 + 确定性摘要 | 当前 1 套，目标 10–20 套 |

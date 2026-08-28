@@ -25,6 +25,7 @@
 | ScriptAssemblies provenance | Partial | `PROJECT_ATTESTED` | Revision input/output hash closure can be attested; still an external Unity-build statement, not a reproducible build |
 | Inspector UnityEvent binding | Not implemented | `UNKNOWN` | Requires serialized assets or runtime evidence |
 | OLD/NEW stable-symbol mapping | Implemented | `CONFIRMED_STATIC` | Same Roslyn-qualified type/method identity only |
+| Changed-C# subgraph without compile baseline | Implemented (explicit) | `STRUCTURAL / PARTIAL` | Requires `--allow-syntax-partial`; excludes full assembly, defines, metadata, and unchanged dependencies |
 | OLD/NEW structural mapping | Partial | `STRUCTURAL` | Unique kind/label/path only; ambiguous candidates are not guessed |
 | Rename/cross-type move mapping | Partial | `STRUCTURAL` | Requires a reviewed mapping hint; no automatic similarity claim |
 | Golden Change | Partial | Human annotation + deterministic digest | 1 case currently; target is 10–20 |

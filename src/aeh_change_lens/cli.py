@@ -13,6 +13,7 @@ from .languages.csharp import (
     BuildProvenanceExporter,
     CompileManifestExporter,
     MappingHint,
+    RevisionBaselinePreflight,
     RevisionChangeAnalyzer,
     UnityContextBuilder,
     WorkerInputAssembler,
@@ -25,7 +26,7 @@ from .reporting import ChangeStoryBuilder, write_change_story_report
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="change-lens",
-        description="AEH Change Lens（当前仅开放只读快照诊断命令）",
+        description="AEH Change Lens（只读 OLD → NEW 代码变更分析）",
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
     snapshot = subcommands.add_parser("snapshot", help="绑定原版本与新版本源码清单")
@@ -66,6 +67,13 @@ def _parser() -> argparse.ArgumentParser:
     analyze_change.add_argument("--target", default="WORKTREE", help="NEW Git revision 或 WORKTREE")
     analyze_change.add_argument("--request-id", required=True)
     analyze_change.add_argument("--mapping-hints", help="可选的人工复核映射提示 JSON 数组")
+    analyze_change.add_argument(
+        "--allow-syntax-partial", action="store_true",
+        help="缺少 revision 编译基线时，仅分析已变更 C# 文件并显式输出 PARTIAL",
+    )
+    analyze_change.add_argument(
+        "--progress", action="store_true", help="在 stderr 输出阶段进度"
+    )
     analyze_change.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
     explain = subcommands.add_parser(
         "explain", help="一键分析 OLD/NEW Unity 快照并生成中文 Change Story HTML 报告"
@@ -79,6 +87,13 @@ def _parser() -> argparse.ArgumentParser:
     explain.add_argument("--output", required=True, help="输出的单文件 HTML 报告路径")
     explain.add_argument("--analysis-output", help="可选：同时保留完整 change-analysis JSON")
     explain.add_argument("--mapping-hints", help="可选的人工复核映射提示 JSON 数组")
+    explain.add_argument(
+        "--allow-syntax-partial", action="store_true",
+        help="缺少 revision 编译基线时，仅分析已变更 C# 文件并显式输出 PARTIAL",
+    )
+    explain.add_argument(
+        "--progress", action="store_true", help="在 stderr 输出阶段进度"
+    )
     explain.add_argument(
         "--intent-evidence", help="可选的用户目标、AI 计划和提交说明 JSON"
     )
@@ -172,6 +187,54 @@ def _mapping_hints(path: str | None) -> list[MappingHint]:
 
 def _analyze_change(arguments: argparse.Namespace) -> dict:
     resolver = SnapshotResolver(arguments.repository)
+    progress = (
+        (lambda message: print(f"[change-lens] {message}", file=sys.stderr, flush=True))
+        if getattr(arguments, "progress", False) else None
+    )
+    if progress:
+        progress("预检 OLD/NEW revision 编译基线")
+    availability = RevisionBaselinePreflight(
+        resolver, arguments.unity_project
+    ).inspect(arguments.base, arguments.target, arguments.assembly)
+    analyzer = RevisionChangeAnalyzer(resolver, arguments.unity_project)
+    if not availability.strict_ready:
+        missing = ", ".join(availability.missing_lanes)
+        if not getattr(arguments, "allow_syntax_partial", False):
+            project_path = availability.old_candidates[0]
+            raise ValueError(
+                "revision-bound generated Unity project or compile manifest is unavailable: "
+                f"{missing} {project_path}; rerun with --allow-syntax-partial for an "
+                "explicit changed-C# structural report"
+            )
+        if progress:
+            progress(f"{missing} 缺少编译基线，切换为显式 syntax-only PARTIAL")
+        changed_paths = resolver.changed_csharp_paths(arguments.base, arguments.target)
+        if not changed_paths:
+            raise ValueError("syntax-only fallback found no changed C# source files")
+        if progress:
+            progress(f"绑定 {len(changed_paths)} 个已变更 C# 路径")
+        old = resolver.resolve_revision_paths(arguments.base, "OLD", changed_paths)
+        new = (
+            resolver.resolve_worktree_paths("NEW", changed_paths)
+            if arguments.target == "WORKTREE"
+            else resolver.resolve_revision_paths(arguments.target, "NEW", changed_paths)
+        )
+        renames = resolver.detect_renames(
+            arguments.base,
+            arguments.target,
+            supplement_untracked_exact=False,
+        )
+        return analyzer.analyze_syntax_partial(
+            old,
+            new,
+            arguments.request_id,
+            renames=renames,
+            mapping_hints=_mapping_hints(arguments.mapping_hints),
+            missing_baseline_lanes=availability.missing_lanes,
+            progress=progress,
+        )
+    if progress:
+        progress("编译基线可用，绑定完整源码快照")
     old = resolver.resolve_revision(arguments.base, "OLD")
     new = (
         resolver.resolve_worktree("NEW")
@@ -179,13 +242,14 @@ def _analyze_change(arguments: argparse.Namespace) -> dict:
         else resolver.resolve_revision(arguments.target, "NEW")
     )
     renames = resolver.detect_renames(arguments.base, arguments.target)
-    return RevisionChangeAnalyzer(resolver, arguments.unity_project).analyze(
+    return analyzer.analyze(
         old,
         new,
         arguments.assembly,
         arguments.request_id,
         renames=renames,
         mapping_hints=_mapping_hints(arguments.mapping_hints),
+        progress=progress,
     )
 
 
@@ -234,6 +298,8 @@ def _story_result(
 
 def _explain(arguments: argparse.Namespace) -> dict:
     analysis = _analyze_change(arguments)
+    if getattr(arguments, "progress", False):
+        print("[change-lens] 生成 Change Story HTML", file=sys.stderr, flush=True)
     source_root = Path(arguments.repository) / Path(arguments.unity_project)
     result = _story_result(analysis, arguments, repository=os.fspath(source_root))
     if arguments.analysis_output:

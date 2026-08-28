@@ -24,7 +24,7 @@ Do not expose assembly names, request IDs, manifests, digests, or Worker setup u
 
 Explicit invocation authorizes read-only inspection, building the Change Lens repository-owned Worker, and writing report artifacts outside the analyzed repository. It does not authorize modifying, checking out, compiling, or executing target-project code.
 
-Never run `export-compile-manifest` or `export-build-provenance` without separate, explicit authorization in the current conversation because they write evidence files into the target repository. When a baseline is missing, explain the one-time requirement in plain Chinese and stop after safe dry-run diagnostics.
+Never run `export-compile-manifest` or `export-build-provenance` without separate, explicit authorization in the current conversation because they write evidence files into the target repository. When a revision baseline is missing, use the explicit read-only `--allow-syntax-partial` fallback first. Report `PARTIAL` prominently and explain that it covers only changed C# files; do not imply that a compile baseline was reconstructed.
 
 Never claim access to hidden model reasoning. Keep these layers distinct:
 
