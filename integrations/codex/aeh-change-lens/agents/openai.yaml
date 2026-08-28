@@ -1,0 +1,7 @@
+interface:
+  display_name: "AEH Change Lens"
+  short_description: "按需解释 Unity 代码修改的原链路与新链路"
+  default_prompt: "Use $aeh-change-lens to explain my current Unity code changes."
+
+policy:
+  allow_implicit_invocation: false

@@ -52,6 +52,14 @@ change-lens explain <repository-root> <unity-project-relative-path> --assembly <
 change-lens render-report <change-analysis.json> --intent-evidence <intent.json> --output <report.html> --pretty
 ```
 
+个人 Codex 工作流可安装显式触发的 `$aeh-change-lens` Skill：
+
+```powershell
+.\integrations\codex\install_skill.ps1
+```
+
+安装后对 Codex 说“使用 Change Lens 分析我当前的 Unity 修改”，或直接调用 `$aeh-change-lens`。该 Skill 默认不会自动介入普通代码任务；它负责隐藏 CLI 参数、定位 ET6/Unity、生成报告并返回主要结论。目标项目仍保持只读，建立 compile baseline 等写入操作必须单独授权。
+
 该命令只读取 Git 对象和工作树中的受支持源码，输出原/新版本的相对路径、对象 ID、逐文件 SHA-256、清单摘要和 rename 映射；不 checkout、不编译或执行目标项目代码。
 
 Roslyn Worker 的当前纵切可以提取类型、方法、调用、分支、异常、返回、状态读写、生命周期、Coroutine/yield、async/await、C# event/delegate、UnityEvent、序列化引用、组件查找和动态未知关系。Unity Context Builder 已执行 asmdef 平台、Define Constraints 与 Version Defines 判定，并将 Unity 版本、锁定包版本、依赖和 metadata 纳入摘要绑定。`graph-diff` 已能将 OLD/NEW Worker 图映射为确定性的新增、删除、更新、移动与不变链路；稳定符号可静态确认，人工重命名提示和唯一结构映射保持较低置信度，歧义候选不猜测。`explain` 进一步将差异投影为中文优先、无脚本、完全离线的 Change Story HTML，严格分开代码事实、来源证据和意图推断。程序集图会递归跟随 ProjectReference，但 `Library/ScriptAssemblies` 输出在缺少源码快照来源证明时保持 `PROJECT_UNVERIFIED`。`roslyn-input` 只从已绑定的 Git/工作树快照取源码字节，并在装配前后检查 stale；ET6/Unity 2020.3 的只读试点已覆盖 UTF-8、UTF-8 BOM 和 GB18030 历史源码。
@@ -105,6 +113,10 @@ closure of an externally produced `ScriptAssemblies` DLL. Such a reference is
 `explain` now creates a self-contained Chinese-first Change Story HTML report.
 It keeps code facts, supplied source statements, and intent hypotheses in
 separate layers; it never claims to reconstruct hidden model reasoning.
+
+An explicit-only `$aeh-change-lens` Codex Skill is available under
+`integrations/codex`. It orchestrates the local tool for the user's Unity work
+without implicitly activating during ordinary coding tasks.
 
 ## License
 
