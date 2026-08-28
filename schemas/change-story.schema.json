@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeh-change-lens.dev/schemas/change-story.schema.json",
+  "title": "Chinese-first evidence-layered Change Story",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "story_id", "language", "status", "title",
+    "analysis_digest", "revisions", "overview", "lanes", "changes",
+    "claims", "impacts", "limitations", "canonical_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "story_id": { "type": "string", "pattern": "^story:[a-f0-9]{24}$" },
+    "language": { "const": "zh-CN" },
+    "status": { "enum": ["FRESH", "PARTIAL"] },
+    "title": { "type": "string", "minLength": 1 },
+    "analysis_digest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "revisions": {
+      "type": "object", "additionalProperties": false,
+      "required": ["old", "new"],
+      "properties": {
+        "old": { "$ref": "common.schema.json#/$defs/revision_binding" },
+        "new": { "$ref": "common.schema.json#/$defs/revision_binding" }
+      }
+    },
+    "overview": {
+      "type": "object", "additionalProperties": false,
+      "required": ["headline_zh", "headline_en", "counts"],
+      "properties": {
+        "headline_zh": { "type": "string", "minLength": 1 },
+        "headline_en": { "type": "string", "minLength": 1 },
+        "counts": { "$ref": "#/$defs/counts" }
+      }
+    },
+    "lanes": {
+      "type": "object", "additionalProperties": false,
+      "required": ["old", "new"],
+      "properties": {
+        "old": { "$ref": "#/$defs/lane" },
+        "new": { "$ref": "#/$defs/lane" }
+      }
+    },
+    "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } },
+    "claims": { "type": "array", "items": { "$ref": "#/$defs/claim" } },
+    "impacts": { "type": "array", "items": { "$ref": "#/$defs/impact" } },
+    "limitations": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "canonical_digest": { "$ref": "common.schema.json#/$defs/sha256" }
+  },
+  "$defs": {
+    "counts": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "old_nodes", "new_nodes", "mapped_nodes", "added_nodes", "removed_nodes",
+        "updated_node_pairs", "moved_node_pairs", "added_edges", "removed_edges",
+        "unchanged_edge_pairs"
+      ],
+      "properties": {
+        "old_nodes": { "type": "integer", "minimum": 0 },
+        "new_nodes": { "type": "integer", "minimum": 0 },
+        "mapped_nodes": { "type": "integer", "minimum": 0 },
+        "added_nodes": { "type": "integer", "minimum": 0 },
+        "removed_nodes": { "type": "integer", "minimum": 0 },
+        "updated_node_pairs": { "type": "integer", "minimum": 0 },
+        "moved_node_pairs": { "type": "integer", "minimum": 0 },
+        "added_edges": { "type": "integer", "minimum": 0 },
+        "removed_edges": { "type": "integer", "minimum": 0 },
+        "unchanged_edge_pairs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "story_node": {
+      "type": "object", "additionalProperties": false,
+      "required": ["node_id", "label", "kind", "change", "location", "confidence"],
+      "properties": {
+        "node_id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "change": { "$ref": "common.schema.json#/$defs/change_kind" },
+        "location": { "$ref": "common.schema.json#/$defs/source_location" },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" }
+      }
+    },
+    "story_relation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["edge_id", "relation", "relation_zh", "change", "confidence"],
+      "properties": {
+        "edge_id": { "type": "string", "minLength": 1 },
+        "relation": { "type": "string", "minLength": 1 },
+        "relation_zh": { "type": "string", "minLength": 1 },
+        "change": { "$ref": "common.schema.json#/$defs/change_kind" },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" }
+      }
+    },
+    "relationship": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "edge_id", "source", "target", "relation", "relation_zh", "change", "confidence"
+      ],
+      "properties": {
+        "edge_id": { "type": "string", "minLength": 1 },
+        "source": { "$ref": "#/$defs/story_node" },
+        "target": { "$ref": "#/$defs/story_node" },
+        "relation": { "type": "string", "minLength": 1 },
+        "relation_zh": { "type": "string", "minLength": 1 },
+        "change": { "$ref": "common.schema.json#/$defs/change_kind" },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" }
+      }
+    },
+    "chain": {
+      "type": "object", "additionalProperties": false,
+      "required": ["chain_id", "nodes", "relations"],
+      "properties": {
+        "chain_id": { "type": "string", "pattern": "^chain:(?:old|new):[a-f0-9]{16}$" },
+        "nodes": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/story_node" } },
+        "relations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/story_relation" } }
+      }
+    },
+    "lane": {
+      "type": "object", "additionalProperties": false,
+      "required": ["role", "label_zh", "label_en", "chains", "relationships"],
+      "properties": {
+        "role": { "enum": ["OLD", "NEW"] },
+        "label_zh": { "type": "string", "minLength": 1 },
+        "label_en": { "type": "string", "minLength": 1 },
+        "chains": { "type": "array", "items": { "$ref": "#/$defs/chain" } },
+        "relationships": { "type": "array", "items": { "$ref": "#/$defs/relationship" } }
+      }
+    },
+    "change": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "change_id", "kind", "subject_zh", "subject_en", "confidence",
+        "evidence_refs", "locations"
+      ],
+      "properties": {
+        "change_id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["ADDED", "REMOVED", "UPDATED", "MOVED", "RENAMED", "RENAMED_AND_MOVED"] },
+        "subject_zh": { "type": "string", "minLength": 1 },
+        "subject_en": { "type": "string", "minLength": 1 },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" },
+        "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "locations": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/source_location" } }
+      }
+    },
+    "claim": {
+      "type": "object", "additionalProperties": false,
+      "required": ["claim_id", "layer", "statement_zh", "statement_en", "confidence", "evidence_refs"],
+      "properties": {
+        "claim_id": { "type": "string", "minLength": 1 },
+        "layer": { "enum": ["CODE_FACT", "SOURCE_EVIDENCE", "INTENT_INFERENCE"] },
+        "statement_zh": { "type": "string", "minLength": 1 },
+        "statement_en": { "type": "string", "minLength": 1 },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" },
+        "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "impact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["impact_id", "label", "kind", "change", "location", "evidence_refs"],
+      "properties": {
+        "impact_id": { "type": "string", "pattern": "^impact:[a-f0-9]{16}$" },
+        "label": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["STATE", "EVENT", "TYPE", "UNKNOWN_TARGET"] },
+        "change": { "enum": ["ADDED", "REMOVED"] },
+        "location": { "$ref": "common.schema.json#/$defs/source_location" },
+        "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    }
+  }
+}

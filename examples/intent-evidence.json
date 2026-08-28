@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0.0",
+  "source": "reviewed AI session",
+  "user_goal": "增加领奖参数校验，并将奖励策略拆分到独立类型。",
+  "ai_plan": [
+    "在状态写入前增加参数检查。",
+    "将奖励计算移动到独立策略类型。"
+  ],
+  "commit_message": "guard invalid reward amounts and extract reward policy"
+}

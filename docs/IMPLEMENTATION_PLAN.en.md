@@ -62,6 +62,12 @@ The static MVP reads Git objects without checkout and does not execute project c
 | CL-WP-06 | Chinese old/new viewer and export | Chinese facts match the Bundle; accessible; offline |
 | CL-WP-07 | Measured pilot | Explicit CONTINUE, REPOSITION, or STOP decision |
 
+Product-alignment slice: `CL-WP-02` may emit a static Change Story that consumes
+only the current deterministic analysis so the old-to-new explanation can be
+tested early. This slice does not activate `CL-WP-05/06` or pass their Gates;
+full explanation validation, accessible Viewer work, and pilot measurement keep
+their original dependency order.
+
 ## 7. P0 acceptance criteria
 
 - `CL-AC-001`: deterministic binding of revisions, inputs, analyzers and configuration.

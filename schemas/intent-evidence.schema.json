@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeh-change-lens.dev/schemas/intent-evidence.schema.json",
+  "title": "Optional human/AI source statements for Change Story",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "source": { "type": "string", "minLength": 1 },
+    "user_goal": { "type": "string", "minLength": 1 },
+    "ai_plan": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "commit_message": { "type": "string", "minLength": 1 }
+  },
+  "anyOf": [
+    { "required": ["user_goal"] },
+    { "required": ["ai_plan"] },
+    { "required": ["commit_message"] }
+  ]
+}

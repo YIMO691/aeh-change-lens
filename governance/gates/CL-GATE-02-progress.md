@@ -52,6 +52,11 @@
 - `PROJECT_ATTESTED` Worker references with a second Worker-side digest check;
 - strict separation between external hash attestation and reproducible-build proof;
 - historical output mismatch degrades to `PARTIAL`; a stale worktree output fails closed.
+- Chinese-first, self-contained Change Story HTML projection from the deterministic diff;
+- explicit separation of `CODE_FACT`, `SOURCE_EVIDENCE` and `INTENT_INFERENCE`;
+- bounded OLD/NEW path rendering with source locations, impact list and limitations;
+- script-free/offline rendering with HTML escaping and independent story digest;
+- `explain` end-to-end CLI plus `render-report` for an existing analysis artifact.
 
 ## ET6 read-only measurements
 
@@ -143,7 +148,8 @@ Latest result:
 
 ```text
 Build succeeded: 0 warnings, 0 errors
-Ran 76 tests in 145.536s
+Local: Ran 85 tests in 54.984s; OK (skipped=4)
+ET6: Ran 85 tests in 158.180s
 OK (skipped=1)
 ```
 
@@ -162,6 +168,17 @@ sha256=7c47c6fd1bce7f21375a4c965e6bcbb92ae937e765b84b30ea6af25432389228
 
 The count and digest are identical. No ET6 file was written, checked out,
 compiled, executed, staged, or cleaned.
+
+The Change Story increment additionally hashed the content of all supported
+source/configuration files outside generated `Library`, `Temp`, `Logs` and
+`obj` directories before and after the real-project suite:
+
+```text
+protected_entries=7575
+before_sha256=0bbc339f93ae90ad8deecbb440567e333fc5060fdaab4206b02045ff5c8e732c
+after_sha256=0bbc339f93ae90ad8deecbb440567e333fc5060fdaab4206b02045ff5c8e732c
+fingerprint_equal=True
+```
 
 The worktree snapshot now binds 24 generated csproj files. ET6's
 `Unity/Unity.Model.csproj` is not present in HEAD, so strict
@@ -208,4 +225,5 @@ remain unmapped and explicitly limited.
 - cover additional platform aliases and non-registry package-version forms;
 - add alias-aware state flow, event removal and Inspector bindings;
 - expand from 1 Golden Change to the planned 10–20 cases;
+- validate Change Story comprehension and navigation on larger real gameplay changes;
 - run performance and adversarial matrices.

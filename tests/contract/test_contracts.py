@@ -83,6 +83,7 @@ class JsonSchemaContractTests(unittest.TestCase):
         validate("analyzer-request.schema.json", load_json("examples/analyzer-request.json"))
         validate("analyzer-result.schema.json", load_json("examples/analyzer-result.json"))
         validate("analyzer-diff.schema.json", load_json("examples/analyzer-diff.json"))
+        validate("intent-evidence.schema.json", load_json("examples/intent-evidence.json"))
         bundle = load_json("examples/explain-bundle.json")
         validate("explain-bundle.schema.json", bundle)
         assert_bundle_semantics(bundle)
