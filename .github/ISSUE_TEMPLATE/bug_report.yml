@@ -1,0 +1,74 @@
+name: 缺陷报告 / Bug report
+description: 报告可复现的 Change Lens 错误或可信边界问题
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢报告问题。请只提供经过脱敏的最小证据；不要上传专有项目源码、凭据或内部仓库地址。安全漏洞请先阅读 SECURITY.md，不要公开披露细节。
+  - type: dropdown
+    id: area
+    attributes:
+      label: 影响区域 / Area
+      options:
+        - Codex Skill
+        - CLI 与编排 / CLI and orchestration
+        - Git 快照或 Unity 上下文 / Snapshot or Unity context
+        - Roslyn Worker
+        - Change Story 报告
+        - 文档或协作流程 / Documentation or workflow
+        - 其他 / Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / Version
+      description: 发布版本或 commit SHA
+      placeholder: 9d8c603
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境 / Environment
+      description: 操作系统、Python、.NET SDK、Git、Unity 版本，以及 Skill 或 CLI
+      placeholder: Windows 11; Python 3.12; .NET SDK 8.0; Git 2.x; Unity 2022.3; Codex Skill
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现步骤 / Minimal reproduction
+      description: 包含经过脱敏的命令、输入类型和操作顺序
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果 / Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果 / Actual result
+      description: 包含退出状态、错误摘要和是否生成 PARTIAL 报告
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 脱敏证据 / Sanitized evidence
+      description: 可选。优先使用人工构造 fixture 或最小日志片段。
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交确认 / Checks
+      options:
+        - label: 我已搜索现有 Issue，未发现重复问题。
+          required: true
+        - label: 我没有附加专有源码、凭据、内部地址或个人信息。
+          required: true
+        - label: 我确认报告不包含需要私密披露的安全漏洞细节。
+          required: true

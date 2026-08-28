@@ -12,6 +12,12 @@ license = { text = "MIT" }
 authors = [{ name = "AEH Change Lens contributors" }]
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/YIMO691/aeh-change-lens"
+Documentation = "https://github.com/YIMO691/aeh-change-lens/blob/main/docs/README.md"
+Repository = "https://github.com/YIMO691/aeh-change-lens.git"
+Issues = "https://github.com/YIMO691/aeh-change-lens/issues"
+
 [project.scripts]
 change-lens = "aeh_change_lens.cli:main"
 

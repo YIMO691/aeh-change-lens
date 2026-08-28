@@ -1,123 +1,169 @@
 # AEH Change Lens
 
-> 状态：已授权实施；`CL-GATE-00`、`CL-GATE-01` 已通过，正在实施 `CL-WP-02`。
-> Status: implementation authorized; `CL-GATE-00` and `CL-GATE-01` passed; `CL-WP-02` is active.
+[![Governed checks](https://github.com/YIMO691/aeh-change-lens/actions/workflows/contracts.yml/badge.svg)](https://github.com/YIMO691/aeh-change-lens/actions/workflows/contracts.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](pyproject.toml)
+[![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4.svg)](worker/ChangeLens.Analyzer/ChangeLens.Analyzer.csproj)
 
-## 中文
+中文 | [English](README.en.md) | [文档索引](docs/README.md)
 
-AEH Change Lens 是一个只读的代码变更解释工具。它把一次 AI 辅助修改展示为：
+AEH Change Lens 是面向 Unity/C# 游戏业务代码的只读修改解释工具。它把一次代码修改整理为：
 
 ```text
-原逻辑链路 -> 结构化变化 -> 新逻辑链路
-                 |
-                 +-> 需求、证据、测试、验证与不确定性
+原逻辑链路 → 结构化变化 → 新逻辑链路
+                  │
+                  └─ 代码事实、来源证据、意图推断、影响与未知项
 ```
 
-它不尝试读取或还原模型隐藏的思维链，而是展示能够被代码、Git、AEH 工件和测试结果支持的修改依据。
+它不会读取或还原模型隐藏思维链，只展示能够被 Git、Roslyn、用户提供的任务说明和明确标注的推断所支持的结论。
 
-首个版本的已确认默认项：
+> [!IMPORTANT]
+> 项目目前是开发预览版，`CL-WP-02` 仍为 `IN_PROGRESS`，尚未完成正式发布评估。当前适合个人受控工作流和原型验证，不代表所有 Unity 项目都可开箱即用。
 
-- 首发产品语言和界面为中文，保留英文方案文档；
-- 独立于 AEH 的仓库，采用 Python 编排层 + .NET/Roslyn 分析 Worker；
-- 首发分析语言为 C#，主要面向 Unity/游戏业务代码；
-- 默认完全离线、确定性分析；
-- LLM 解释仅在用户显式启用时使用；
-- 目标用户为代码修改者和 Reviewer；
-- 使用 10–20 个人工标注 Change 做试点；
-- Change Lens 永远不修改 AEH 的 Gate、审批或机器真值。
+## 功能
 
-详细方案：
+- 对比 Git `OLD` revision 与 `NEW` revision/工作树，全程不 checkout。
+- 使用 Roslyn 提取调用、分支、异常、状态读写、生命周期、协程、异步、事件和常见 Unity 关系。
+- 输出确定性的新增、删除、修改、移动和上下文关系。
+- 生成中文优先、无脚本、完全离线的 Change Story HTML。
+- 严格分开 `CODE_FACT`、`SOURCE_EVIDENCE` 和 `INTENT_INFERENCE`。
+- 对缺失、过期、越界或无法证明的输入 fail closed 或显式降级为 `PARTIAL`。
+- 提供显式触发的 `$aeh-change-lens` Codex Skill，隐藏日常 CLI 参数。
 
-- [中文实施方案](docs/IMPLEMENTATION_PLAN.zh-CN.md)
-- [English implementation plan](docs/IMPLEMENTATION_PLAN.en.md)
-- [C#/Unity 能力矩阵](docs/CAPABILITY_MATRIX.zh-CN.md)
-- [C#/Unity capability matrix](docs/CAPABILITY_MATRIX.en.md)
-- [OLD/NEW 图差异契约](docs/GRAPH_DIFF.zh-CN.md)
-- [OLD/NEW graph diff contract](docs/GRAPH_DIFF.en.md)
-- [中文 Change Story HTML 报告](docs/CHANGE_STORY.zh-CN.md)
-- [Change Story HTML report](docs/CHANGE_STORY.en.md)
-- [机器可读治理契约](governance/proposal.yaml)
+详细覆盖范围见[能力矩阵](docs/CAPABILITY_MATRIX.zh-CN.md)。
 
-当前已实现的开发者入口：
+## 快速开始
 
-```powershell
-change-lens snapshot <repository-root> --base <commit> --target WORKTREE --pretty
-change-lens unity-context <unity-project-root> --assembly <name> --graph --pretty
-change-lens roslyn-input <repository-root> <unity-project-root> --assembly <name> --request-id <id>
-change-lens graph-diff <old-result.json> <new-result.json> --mapping-hints <hints.json> --pretty
-change-lens export-compile-manifest <repository-root> <unity-project-relative-path> --assembly <name> --pretty
-change-lens export-build-provenance <repository-root> <unity-project-relative-path> --assembly <name> --pretty
-change-lens analyze-change <repository-root> <unity-project-relative-path> --assembly <name> --base <commit> --target WORKTREE --request-id <id> --pretty
-change-lens explain <repository-root> <unity-project-relative-path> --assembly <name> --base <commit> --target WORKTREE --request-id <id> --intent-evidence <intent.json> --analysis-output <analysis.json> --output <report.html> --pretty
-change-lens render-report <change-analysis.json> --intent-evidence <intent.json> --output <report.html> --pretty
-```
+### 方式一：通过 Codex 使用（个人工作推荐）
 
-个人 Codex 工作流可安装显式触发的 `$aeh-change-lens` Skill：
+安装仓库内的显式触发 Skill：
 
 ```powershell
 .\integrations\codex\install_skill.ps1
 ```
 
-安装后对 Codex 说“使用 Change Lens 分析我当前的 Unity 修改”，或直接调用 `$aeh-change-lens`。该 Skill 默认不会自动介入普通代码任务；它负责隐藏 CLI 参数、定位 ET6/Unity、生成报告并返回主要结论。目标项目仍保持只读，建立 compile baseline 等写入操作必须单独授权。
-
-该命令只读取 Git 对象和工作树中的受支持源码，输出原/新版本的相对路径、对象 ID、逐文件 SHA-256、清单摘要和 rename 映射；不 checkout、不编译或执行目标项目代码。
-
-Roslyn Worker 的当前纵切可以提取类型、方法、调用、分支、异常、返回、状态读写、生命周期、Coroutine/yield、async/await、C# event/delegate、UnityEvent、序列化引用、组件查找和动态未知关系。Unity Context Builder 已执行 asmdef 平台、Define Constraints 与 Version Defines 判定，并将 Unity 版本、锁定包版本、依赖和 metadata 纳入摘要绑定。`graph-diff` 已能将 OLD/NEW Worker 图映射为确定性的新增、删除、更新、移动与不变链路；稳定符号可静态确认，人工重命名提示和唯一结构映射保持较低置信度，歧义候选不猜测。`explain` 进一步将差异投影为中文优先、无脚本、完全离线的 Change Story HTML，严格分开代码事实、来源证据和意图推断。程序集图会递归跟随 ProjectReference，但 `Library/ScriptAssemblies` 输出在缺少源码快照来源证明时保持 `PROJECT_UNVERIFIED`。`roslyn-input` 只从已绑定的 Git/工作树快照取源码字节，并在装配前后检查 stale；ET6/Unity 2020.3 的只读试点已覆盖 UTF-8、UTF-8 BOM 和 GB18030 历史源码。
-
-`CL-GATE-02` 尚未通过：当前只有 1 套人工标注 Golden Change，尚未达到计划的 10–20 套；`ScriptAssemblies` 当前只有外部构建哈希闭包证明，尚不是可复现构建；状态读取仍不覆盖别名与运行时对象，事件移除和 Inspector 绑定尚未补齐。Viewer 的首个静态 HTML 纵切已经实现，但尚无大型真实变更上的可用性验收、筛选、缩放、搜索或 IDE 集成。
-
-`analyze-change` 要求 OLD 与 NEW snapshot 各自包含生成的 `<Assembly>.csproj`，或包含由 `export-compile-manifest` 预先导出并提交的 `.aeh-change-lens/compile-manifests/<Assembly>.json`。清单绑定 define、精确源码集合及语义哈希、metadata 文件名/哈希和 ProjectReference，不保存本机绝对 DLL 路径。源码变化后未重新导出会 fail closed；当前工作树 csproj 只能按文件名与 SHA-256 定位本机 DLL，不能向历史版本注入源码或编译选项。没有建立清单基线的旧提交仍不会被追溯猜测。
-
-`export-build-provenance` 在 compile manifest 已建立且与当前生成项目一致后，为 Unity 外部生成的 `Library/ScriptAssemblies/<Assembly>.dll` 记录输入/输出哈希闭包。满足同 revision 输入绑定且本机 DLL 哈希匹配时，该 ProjectReference 可作为 `PROJECT_ATTESTED` 进入 Worker。它是 `EXTERNAL_UNITY_BUILD` 的审计声明，不声称工具亲自构建或已经实现跨机器可复现构建。
-
-当前 Gate：
+在新的 Codex 会话中调用：
 
 ```text
-PLAN_READY
-IMPLEMENTATION_AUTHORIZATION_GRANTED
-CL-GATE-00_PASSED
-CL-GATE-01_PASSED
-CL-WP-02_IN_PROGRESS
-RELEASE_NOT_ASSESSED
+$aeh-change-lens 分析我当前对 ET6 的修改
 ```
 
-## English
+Skill 默认不会介入普通编码任务。它会优先使用当前 Git 仓库，否则使用个人默认项目 `D:\ares\project\ET6`，并将报告写到目标仓库之外。
 
-AEH Change Lens is a read-only code-change explanation tool. It presents an AI-assisted modification as an evidence-linked transition from the old logic path to the new logic path.
+### 方式二：直接使用 CLI
 
-It does not claim to expose hidden model chain of thought. It explains only rationale supported by source, Git history, AEH artifacts, tests, runtime observations, or clearly labeled inference.
+要求：
 
-Confirmed defaults for the first version:
+- Python 3.11 或更高版本；
+- .NET SDK 8.0；
+- Git；
+- Unity 项目中可验证的生成项目或 compile-manifest 基线。
 
-- Chinese as the launch product/UI language, with English plan documentation;
-- a repository separate from AEH, with Python orchestration and a .NET/Roslyn analyzer worker;
-- C# as the first analyzed language, focused on Unity/gameplay code;
-- deterministic offline analysis by default;
-- optional LLM explanation only after explicit enablement;
-- change authors and reviewers as the primary users;
-- a pilot corpus of 10–20 manually annotated Changes;
-- no mutation of AEH Gates, approvals, or normative machine truth.
+```powershell
+python -m pip install -e ".[contract]"
+dotnet build worker\ChangeLens.Analyzer\ChangeLens.Analyzer.csproj --configuration Release
+```
 
-Implementation was explicitly authorized on 2026-08-27. Work proceeds one governed
-work package at a time; no release claim has been made.
+生成 OLD → NEW 报告：
 
-For Unity repositories that ignore generated csproj files,
-`export-compile-manifest` creates a portable, committable baseline. Historical
-analysis accepts that artifact only from the matching revision, rejects stale
-source semantics, and never substitutes NEW compile options for OLD.
+```powershell
+change-lens explain D:\GameRepo Unity `
+  --assembly Unity.Model `
+  --base HEAD `
+  --target WORKTREE `
+  --request-id CHANGE-001 `
+  --analysis-output change-analysis.json `
+  --output change-story.html `
+  --pretty
+```
 
-`export-build-provenance` can additionally attest the exact input/output hash
-closure of an externally produced `ScriptAssemblies` DLL. Such a reference is
-`PROJECT_ATTESTED`, not a claim that Change Lens reproduced the Unity build.
+不安装 Python 包也可以从源码仓库调用：
 
-`explain` now creates a self-contained Chinese-first Change Story HTML report.
-It keeps code facts, supplied source statements, and intent hypotheses in
-separate layers; it never claims to reconstruct hidden model reasoning.
+```powershell
+python .\run_change_lens.py --help
+```
 
-An explicit-only `$aeh-change-lens` Codex Skill is available under
-`integrations/codex`. It orchestrates the local tool for the user's Unity work
-without implicitly activating during ordinary coding tasks.
+完整参数和意图证据格式见 [Change Story 使用说明](docs/CHANGE_STORY.zh-CN.md)。
 
-## License
+## 编译基线
 
-MIT. See [LICENSE](LICENSE).
+可信的历史比较要求 OLD 和 NEW 各自携带匹配版本的 Unity 生成 `.csproj`，或由 Change Lens 导出的 compile manifest。对于忽略 `.csproj` 的仓库，应在相关代码干净时建立基线：
+
+```powershell
+change-lens export-compile-manifest D:\GameRepo Unity `
+  --assembly Unity.Model `
+  --pretty
+```
+
+该命令会向目标仓库写入 `.aeh-change-lens/compile-manifests/<Assembly>.json`。Codex Skill 不会擅自执行；需要用户在当前会话单独授权。没有历史基线时，工具拒绝用当前编译选项冒充旧版本证据。
+
+## 输出
+
+Change Story 报告包含：
+
+1. 修改摘要与变化计数；
+2. 代码事实、来源证据和意图推断；
+3. 原链路与新链路；
+4. 符号变化与代码位置；
+5. 状态、事件、类型和动态目标影响；
+6. `PARTIAL` 原因及其他限制。
+
+HTML 是 UTF-8 单文件，不包含 JavaScript、CDN、远程字体或遥测。
+
+## 安全边界
+
+默认分析策略：
+
+- 网络访问：拒绝；
+- checkout：拒绝；
+- 编译或执行目标项目代码：拒绝；
+- 修改 AEH Gate、审批或机器真值：拒绝；
+- 构建仓库自有 Roslyn Worker：允许；
+- 在调用者指定位置写报告：允许。
+
+安全问题请按照 [SECURITY.md](SECURITY.md) 私下报告，不要在公开 Issue 中附带专有项目源码。
+
+## 项目结构
+
+```text
+src/aeh_change_lens/          Python 编排、快照、Unity 上下文和报告
+worker/ChangeLens.Analyzer/   .NET 8 / Roslyn 静态分析 Worker
+schemas/                      JSON Schema 契约
+fixtures/                     人工标注 Unity Golden Change
+tests/                        契约、快照、分析、报告和集成测试
+integrations/codex/           显式触发的个人 Codex Skill
+governance/                   工作包、Gate 和原始验证记录
+docs/                         中文权威文档与英文镜像
+```
+
+## 开发与验证
+
+```powershell
+python -m pip install -e ".[contract]"
+dotnet build worker\ChangeLens.Analyzer\ChangeLens.Analyzer.csproj --configuration Release
+python -m unittest discover -s tests -v
+```
+
+测试只允许构建仓库自有 Worker。真实 Unity 试点必须通过环境变量显式启用，并保持目标项目只读。
+
+## 文档
+
+从[文档索引](docs/README.md)开始，或直接阅读：
+
+- [实施方案](docs/IMPLEMENTATION_PLAN.zh-CN.md)
+- [Change Story 报告](docs/CHANGE_STORY.zh-CN.md)
+- [C#/Unity 能力矩阵](docs/CAPABILITY_MATRIX.zh-CN.md)
+- [OLD/NEW 图差异契约](docs/GRAPH_DIFF.zh-CN.md)
+- [Roslyn Worker](docs/ROSLYN_WORKER.zh-CN.md)
+- [快照契约](docs/SNAPSHOT_CONTRACT.zh-CN.md)
+
+## 贡献与支持
+
+- 贡献代码前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- 使用问题见 [SUPPORT.md](SUPPORT.md)。
+- 社区行为要求见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
+- 项目状态和剩余 Gate 条件见 [CL-GATE-02 progress](governance/gates/CL-GATE-02-progress.md)。
+
+## 许可证
+
+[MIT License](LICENSE)
