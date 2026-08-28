@@ -1,0 +1,59 @@
+name: 功能建议 / Feature request
+description: 提议符合只读、证据绑定范围的新能力
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先查看 README、能力矩阵和现有 Issue。功能建议必须保持目标项目只读，并明确哪些结论能够由静态证据支持。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题 / Problem
+      description: 描述工作场景和当前阻碍，不要只描述期望实现。
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 期望结果 / Desired outcome
+      description: 说明用户最终希望理解或验证什么。
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 建议区域 / Area
+      options:
+        - Codex 工作流 / Codex workflow
+        - Unity 或 C# 分析 / Unity or C# analysis
+        - OLD → NEW 图差异
+        - Change Story 报告
+        - 契约、测试或治理 / Contracts, tests, or governance
+        - 文档 / Documentation
+        - 其他 / Other
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 可验证示例 / Verifiable example
+      description: 提供人工构造或脱敏的 OLD/NEW 示例，以及可接受结果。
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: 可信边界与未知项 / Trust boundaries and unknowns
+      description: 哪些部分是代码事实、来源证据、意图推断或无法证明？
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交确认 / Checks
+      options:
+        - label: 我已搜索现有 Issue，并阅读能力矩阵。
+          required: true
+        - label: 建议不要求 Change Lens 编译或执行目标项目代码。
+          required: true
+        - label: 示例不包含专有源码、凭据或个人信息。
+          required: true
