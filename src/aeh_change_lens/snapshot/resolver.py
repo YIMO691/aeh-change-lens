@@ -88,6 +88,10 @@ class SnapshotResolver:
                 "/.aeh-change-lens/compile-manifests/" in f"/{path}"
                 and path.lower().endswith(".json")
             )
+            or (
+                "/.aeh-change-lens/build-manifests/" in f"/{path}"
+                and path.lower().endswith(".json")
+            )
         )
 
     def _commit_oid(self, revision: str) -> str:

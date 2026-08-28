@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeh-change-lens.dev/schemas/build-provenance.schema.json",
+  "title": "Attested hash closure for an externally built Unity assembly",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "assurance", "producer", "assembly_name",
+    "compile_manifest_digest", "assembly_definition", "unity_version",
+    "package_lock", "project_inputs", "output", "canonical_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "assurance": { "const": "ATTESTED_HASH_CLOSURE" },
+    "producer": { "const": "EXTERNAL_UNITY_BUILD" },
+    "assembly_name": { "type": "string", "minLength": 1 },
+    "compile_manifest_digest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "assembly_definition": { "$ref": "#/$defs/file_binding" },
+    "unity_version": { "$ref": "#/$defs/file_binding" },
+    "package_lock": {
+      "oneOf": [
+        { "$ref": "#/$defs/file_binding" },
+        { "type": "null" }
+      ]
+    },
+    "project_inputs": {
+      "type": "array", "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["assembly_name", "output_name", "output_sha256"],
+        "properties": {
+          "assembly_name": { "type": "string", "minLength": 1 },
+          "output_name": { "type": "string", "pattern": "^[^/\\\\]+\\.dll$" },
+          "output_sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+        }
+      }
+    },
+    "output": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "sha256"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[^/\\\\]+\\.dll$" },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "canonical_digest": { "$ref": "common.schema.json#/$defs/sha256" }
+  },
+  "$defs": {
+    "file_binding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "semantic_sha256"],
+      "properties": {
+        "path": {
+          "type": "string", "minLength": 1,
+          "pattern": "^(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+        },
+        "semantic_sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    }
+  }
+}

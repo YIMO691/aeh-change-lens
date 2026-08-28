@@ -18,6 +18,12 @@ from aeh_change_lens.snapshot import (
 )
 from aeh_change_lens.snapshot.security import normalize_repo_relative
 
+from .build_provenance import (
+    BuildProvenanceExporter,
+    BuildProvenanceManifest,
+    ProvenanceFileBinding,
+    build_manifest_unity_path,
+)
 from .compile_manifest import (
     CompileManifest,
     CompileManifestExporter,
@@ -25,7 +31,11 @@ from .compile_manifest import (
     manifest_unity_path,
 )
 from .graph_diff import AnalyzerGraphDiffer, MappingHint
-from .unity_context import UnityCompilationContext, UnityContextBuilder
+from .unity_context import (
+    MetadataReferenceBinding,
+    UnityCompilationContext,
+    UnityContextBuilder,
+)
 from .worker_input import RoslynWorkerInput, WorkerInputAssembler, WorkerSourceInput
 
 
@@ -109,6 +119,7 @@ class RevisionWorkerInputAssembler:
                 destination.write_bytes(content)
 
             reference_overrides: list[dict] | None = None
+            builder_arguments: dict[str, object] = {}
             if compile_manifest is None:
                 context = UnityContextBuilder(unity_root).build(assembly_name)
             else:
@@ -121,18 +132,44 @@ class RevisionWorkerInputAssembler:
                 reference_overrides = self._materialize_manifest_project(
                     unity_root, compile_manifest, located
                 )
-                context = UnityContextBuilder(
-                    unity_root, portable_metadata_paths=True
-                ).build(
+                builder_arguments = {
+                    "portable_metadata_paths": True,
+                }
+                context = UnityContextBuilder(unity_root, **builder_arguments).build(
                     assembly_name,
                     generated_project_kind="COMPILE_MANIFEST",
                     generated_project_origin_sha256=compile_manifest.generated_project_sha256,
                     manifest_path=manifest_path,
                     manifest_sha256=manifest_binding.sha256,
                 )
+            project_bindings, project_references = self._attested_project_outputs(
+                binding, bound_files, context
+            )
+            if project_bindings:
+                context_builder = UnityContextBuilder(
+                    unity_root,
+                    **builder_arguments,
+                    project_output_bindings=project_bindings,
+                )
+                context = (
+                    context_builder.build(assembly_name)
+                    if compile_manifest is None
+                    else context_builder.build(
+                        assembly_name,
+                        generated_project_kind="COMPILE_MANIFEST",
+                        generated_project_origin_sha256=compile_manifest.generated_project_sha256,
+                        manifest_path=manifest_path,
+                        manifest_sha256=manifest_binding.sha256,
+                    )
+                )
             self._assert_context_bound(context, bound_files, compile_manifest)
             worker_input = self._assemble_sources(
-                binding, context, bound_files, request_id, reference_overrides
+                binding,
+                context,
+                bound_files,
+                request_id,
+                reference_overrides,
+                project_references,
             )
 
         self._assert_current(binding)
@@ -158,6 +195,7 @@ class RevisionWorkerInputAssembler:
         bound_files: dict[str, FileBinding],
         request_id: str,
         reference_overrides: list[dict] | None = None,
+        project_references: list[dict] | None = None,
     ) -> RoslynWorkerInput:
         if context.assembly is None:
             raise ValueError("Unity context has no revision-bound assembly definition")
@@ -182,10 +220,11 @@ class RevisionWorkerInputAssembler:
             ))
         if not sources:
             raise ValueError("revision Unity context has no snapshot-bound C# source files")
-        references = reference_overrides if reference_overrides is not None else [
+        references = list(reference_overrides) if reference_overrides is not None else [
             asdict(item) for item in context.metadata_references
             if item.kind in {"UNITY", "EXTERNAL"}
         ]
+        references.extend(project_references or [])
         return RoslynWorkerInput(
             schema_version="1.0.0",
             request_id=request_id,
@@ -335,6 +374,147 @@ class RevisionWorkerInputAssembler:
             manifest.project_bytes()
         )
         return references
+
+    def _attested_project_outputs(
+        self,
+        binding: SnapshotBinding,
+        bound_files: dict[str, FileBinding],
+        context: UnityCompilationContext,
+    ) -> tuple[dict[str, MetadataReferenceBinding], list[dict]]:
+        context_bindings: dict[str, MetadataReferenceBinding] = {}
+        worker_references: list[dict] = []
+        for reference in context.project_references:
+            if not reference.reference_output_assembly or reference.status == "OUTSIDE_UNITY_ROOT":
+                continue
+            assembly_name = reference.assembly_name
+            build_path = build_manifest_unity_path(assembly_name)
+            build_binding = bound_files.get(build_path)
+            if build_binding is None:
+                continue
+            build_manifest = BuildProvenanceManifest.from_bytes(
+                self.resolver.read_bound_bytes(binding, build_binding.path)
+            )
+            if build_manifest.assembly_name != assembly_name:
+                raise SnapshotStaleError("build provenance assembly does not match ProjectReference")
+            compile_path = manifest_unity_path(assembly_name)
+            compile_binding = bound_files.get(compile_path)
+            if compile_binding is None:
+                raise SnapshotStaleError(
+                    f"attested project output has no revision-bound compile manifest: {assembly_name}"
+                )
+            compile_manifest = CompileManifest.from_bytes(
+                self.resolver.read_bound_bytes(binding, compile_binding.path)
+            )
+            if (
+                compile_manifest.assembly_name != assembly_name or
+                compile_manifest.canonical_digest != build_manifest.compile_manifest_digest
+            ):
+                raise SnapshotStaleError("build provenance compile manifest digest mismatch")
+            self._assert_manifest_sources(binding, compile_manifest, bound_files)
+            assembly_content = self._assert_provenance_file(
+                binding, bound_files, build_manifest.assembly_definition
+            )
+            try:
+                assembly_value = json.loads(assembly_content.decode("utf-8-sig"))
+            except (UnicodeError, json.JSONDecodeError) as error:
+                raise SnapshotStaleError("build provenance asmdef is invalid") from error
+            if (
+                not isinstance(assembly_value, dict) or
+                assembly_value.get("name") != assembly_name or
+                not build_manifest.assembly_definition.path.casefold().endswith(".asmdef")
+            ):
+                raise SnapshotStaleError("build provenance asmdef does not match assembly")
+            if build_manifest.unity_version.path != "ProjectSettings/ProjectVersion.txt":
+                raise SnapshotStaleError("build provenance Unity version path is not canonical")
+            self._assert_provenance_file(binding, bound_files, build_manifest.unity_version)
+            if build_manifest.package_lock is not None:
+                if build_manifest.package_lock.path != "Packages/packages-lock.json":
+                    raise SnapshotStaleError("build provenance package-lock path is not canonical")
+                self._assert_provenance_file(
+                    binding, bound_files, build_manifest.package_lock
+                )
+            elif "Packages/packages-lock.json" in bound_files:
+                raise SnapshotStaleError("build provenance omits the revision package lock")
+            expected_inputs = {
+                item.assembly_name
+                for item in compile_manifest.project_references
+                if item.reference_output_assembly
+            }
+            actual_inputs = {item.assembly_name for item in build_manifest.project_inputs}
+            if expected_inputs != actual_inputs:
+                raise SnapshotStaleError("build provenance project input closure mismatch")
+            if build_manifest.output.name.casefold() != f"{assembly_name}.dll".casefold():
+                raise SnapshotStaleError("build provenance output name disagrees with assembly")
+
+            live_output = self._live_script_output(build_manifest.output.name)
+            if live_output is None:
+                continue
+            actual_digest = hashlib.sha256(live_output.read_bytes()).hexdigest()
+            if actual_digest != build_manifest.output.sha256:
+                if binding.commit_oid is None:
+                    raise SnapshotStaleError(
+                        f"worktree build provenance output digest mismatch: {assembly_name}"
+                    )
+                continue
+            if binding.commit_oid is None:
+                current = BuildProvenanceExporter(
+                    self.resolver.repository_root, self.unity_project_path
+                ).build(assembly_name)
+                if current.canonical_digest != build_manifest.canonical_digest:
+                    raise SnapshotStaleError(
+                        f"worktree build provenance is stale: {assembly_name}"
+                    )
+            logical_path = (
+                f".aeh-change-lens/project-outputs/"
+                f"{build_manifest.output.sha256}/{build_manifest.output.name}"
+            )
+            context_bindings[assembly_name] = MetadataReferenceBinding(
+                path=logical_path,
+                sha256=build_manifest.output.sha256,
+                kind="PROJECT_ATTESTED",
+            )
+            worker_references.append({
+                "path": os.fspath(live_output),
+                "sha256": build_manifest.output.sha256,
+                "kind": "PROJECT_ATTESTED",
+            })
+        return context_bindings, worker_references
+
+    def _assert_provenance_file(
+        self,
+        binding: SnapshotBinding,
+        bound_files: dict[str, FileBinding],
+        provenance: ProvenanceFileBinding,
+    ) -> bytes:
+        path = normalize_repo_relative(provenance.path)
+        file_binding = bound_files.get(path)
+        if file_binding is None:
+            raise SnapshotStaleError(f"build provenance input mismatch: {path!r}")
+        content = self.resolver.read_bound_bytes(binding, file_binding.path)
+        try:
+            text = content.decode("utf-8-sig")
+        except UnicodeError as error:
+            raise SnapshotStaleError(
+                f"build provenance text input is not UTF-8: {path!r}"
+            ) from error
+        semantic_text = text.replace("\r\n", "\n").replace("\r", "\n")
+        if hashlib.sha256(semantic_text.encode("utf-8")).hexdigest() != provenance.semantic_sha256:
+            raise SnapshotStaleError(f"build provenance input mismatch: {path!r}")
+        return content
+
+    def _live_script_output(self, output_name: str) -> Path | None:
+        unity_root = self.resolver.repository_root / Path(
+            PurePosixPath(self.unity_project_path)
+        )
+        output = unity_root / "Library" / "ScriptAssemblies" / output_name
+        if not output.is_file():
+            return None
+        info = output.lstat()
+        if output.is_symlink() or bool(
+            getattr(info, "st_file_attributes", 0) & _REPARSE_POINT
+        ):
+            raise ValueError("attested ScriptAssemblies output must not be a link/reparse point")
+        return output.resolve(strict=True)
 
     def _relative_unity_path(self, repo_path: str) -> str | None:
         if not self.unity_project_path:

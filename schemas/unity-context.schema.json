@@ -197,7 +197,10 @@
           "reference_output_assembly": { "type": "boolean" },
           "output_item_type": { "type": ["string", "null"] },
           "status": {
-            "enum": ["BOUND_UNVERIFIED", "MISSING", "OUTSIDE_UNITY_ROOT", "ANALYZER_ONLY"]
+            "enum": [
+              "BOUND_ATTESTED", "BOUND_UNVERIFIED", "MISSING",
+              "OUTSIDE_UNITY_ROOT", "ANALYZER_ONLY"
+            ]
           },
           "script_assembly": {
             "oneOf": [
@@ -209,7 +212,7 @@
                 "properties": {
                   "path": { "type": "string", "minLength": 1 },
                   "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
-                  "kind": { "const": "PROJECT_UNVERIFIED" }
+                  "kind": { "enum": ["PROJECT_ATTESTED", "PROJECT_UNVERIFIED"] }
                 }
               }
             ]

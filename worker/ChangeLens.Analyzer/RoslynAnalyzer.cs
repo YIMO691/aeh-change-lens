@@ -131,7 +131,7 @@ internal static class RoslynAnalyzer
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var reference in references)
         {
-            if (reference.Kind is not ("UNITY" or "EXTERNAL") || !Path.IsPathFullyQualified(reference.Path) ||
+            if (reference.Kind is not ("UNITY" or "EXTERNAL" or "PROJECT_ATTESTED") || !Path.IsPathFullyQualified(reference.Path) ||
                 !reference.Path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Invalid metadata reference descriptor.");
             var path = Path.GetFullPath(reference.Path);

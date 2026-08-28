@@ -28,7 +28,10 @@
           "target_assembly": { "type": "string", "minLength": 1 },
           "include": { "type": "string", "minLength": 1 },
           "status": {
-            "enum": ["BOUND_UNVERIFIED", "MISSING", "OUTSIDE_UNITY_ROOT", "ANALYZER_ONLY"]
+            "enum": [
+              "BOUND_ATTESTED", "BOUND_UNVERIFIED", "MISSING",
+              "OUTSIDE_UNITY_ROOT", "ANALYZER_ONLY"
+            ]
           }
         }
       }

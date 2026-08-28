@@ -22,7 +22,7 @@
 | asmdef 平台适用性 | 已实现 | 确定性上下文事实 | 由生成 csproj define 推导当前编译平台 |
 | asmdef Define Constraints | 已实现 | 确定性上下文事实 | 支持逐行 AND、行内 `||`、`!`；非法表达式为 `UNKNOWN` |
 | Version Defines | 部分实现 | 确定性上下文事实 | 绑定 Unity 版本与 `packages-lock.json`；无法解析的 Git/path 包版本为 `UNKNOWN` |
-| ScriptAssemblies 来源绑定 | 部分实现 | `PROJECT_UNVERIFIED` | 找到产物但未证明其源码/选项/输出闭包 |
+| ScriptAssemblies 来源绑定 | 部分实现 | `PROJECT_ATTESTED` | 可证明 revision 输入/输出哈希闭包；仍是外部 Unity 构建声明，不是可复现构建 |
 | Inspector UnityEvent 绑定 | 未实现 | `UNKNOWN` | 需要序列化资产或运行时证据 |
 | OLD/NEW 稳定符号映射 | 已实现 | `CONFIRMED_STATIC` | 仅类型/方法的同一 Roslyn 限定符号 |
 | OLD/NEW 结构映射 | 部分实现 | `STRUCTURAL` | 仅唯一 kind/label/path；歧义候选不猜测 |

@@ -16,10 +16,10 @@
 - `SendMessage` 显式输出 `DYNAMIC_DISPATCH_UNKNOWN / UNKNOWN`；
 - 节点、边、位置、来源与置信度确定性排序。
 - Unity Context Builder 读取 `.asmdef`、ProjectVersion、生成的 `.csproj`、define、Compile glob、ProjectReference 与 metadata HintPath；
-- 递归构建程序集依赖图，并区分 `BOUND_UNVERIFIED`、`MISSING`、`OUTSIDE_UNITY_ROOT` 与 `ANALYZER_ONLY`；
+- 递归构建程序集依赖图，并区分 `BOUND_ATTESTED`、`BOUND_UNVERIFIED`、`MISSING`、`OUTSIDE_UNITY_ROOT` 与 `ANALYZER_ONLY`；
 - Worker Input Assembler 只读取 `SnapshotBinding` 中的源码，在装配前后复核 snapshot 与 Unity context；
 - 源码编码严格识别 UTF-8、UTF-8 BOM、UTF-16 BOM 和 GB18030，不支持的编码 fail closed；
-- `Library/ScriptAssemblies` 输出没有源码来源绑定时标为 `PROJECT_UNVERIFIED`，且不会进入 Worker metadata references；
+- `Library/ScriptAssemblies` 输出没有来源清单时标为 `PROJECT_UNVERIFIED`，不会进入 Worker；满足 revision-bound 输入/输出哈希闭包时标为 `PROJECT_ATTESTED`，Worker 再次验哈希后才接收；
 - 按 Unity 规则判定 asmdef include/exclude platform 与 Define Constraints，`EXCLUDED` 程序集不能装配为 Worker 输入；
 - 从快照绑定的 `ProjectVersion.txt` 与 `Packages/packages-lock.json` 求值 Version Defines；支持区间、精确版本和裸版本下限，非法或不可解析来源显式降为 `INVALID`/`UNKNOWN`；
 - 输出 Coroutine 启动、yield、await、C# event/delegate 订阅与发布、常见组件查找关系；
@@ -31,6 +31,8 @@
 - `export-compile-manifest` 将生成 csproj 归一化为可提交清单：绑定基础 define、源码路径/语义哈希、metadata 文件名/哈希和 ProjectReference，不保存绝对路径；
 - 当 revision 缺少 csproj 时，`analyze-change` 只接受该 revision 固定路径下、canonical digest 有效且源码哈希匹配的清单；当前 csproj 仅能定位同名同哈希 DLL；
 - Unity Context 记录编译输入种类、物化项目 SHA-256、原始生成项目 SHA-256及 manifest 路径/哈希，而不只记录派生选项。
+- `export-build-provenance` 绑定 compile manifest、asmdef、ProjectVersion、package lock、直接项目输入与外部 Unity 输出；该证明明确标注 `EXTERNAL_UNITY_BUILD / ATTESTED_HASH_CLOSURE`。
+- build provenance 导出拒绝早于任一当前源码/编译输入的输出；`PROJECT_ATTESTED` 仍令 Context 保持“尚未独立复现”的显式 limitation。
 
 ## 当前强制降级
 
@@ -43,7 +45,7 @@
 
 ## `CL-GATE-02` 仍缺少
 
-- 为 `Library/ScriptAssemblies` 输出建立可验证的源码、编译选项和产物来源绑定；
+- 将 `PROJECT_ATTESTED` 外部声明升级为独立可复现构建及工具链证明；
 - 覆盖更多平台名称与非 registry 包版本变体；
 - 补充状态别名、事件移除、Inspector 绑定与组件 API 变体；
 - 将 Golden Change 从当前 1 套扩展到计划的 10–20 套；
@@ -62,6 +64,8 @@
 ET6 当前 worktree 的 `Unity.Model.csproj` 已绑定 SHA-256 `b3eb20ae7abf4c445e1dc6667b3751b31bff0d2131216dca5602da5f747d0e40`，但该文件不存在于 HEAD。严格 `analyze-change HEAD -> WORKTREE` 因而在运行 Worker 前 fail closed，没有用当前 csproj 冒充历史上下文。
 
 只读 dry-run 已从该 csproj 构造不落盘的 portable manifest：140 个基础 define、632 个源码、221 个 metadata reference 和 5 个 ProjectReference；JSON 不含 ET6 绝对路径。`canonical_project_sha256=867c661b3e8becf7fa6da7177a485d984f65d402112f900a26b1741285dd70da`，`canonical_digest=c389dc3058fb284c5c6cf15b3e68a08cd90823e4eedb975455e29f3a9ce2d88d`。这验证了未来基线导出能力，但不会把今天生成的清单伪装成已存在于 HEAD 的历史证据。
+
+5 个 ProjectReference 中有 4 个当前 ScriptAssemblies 输出、1 个 analyzer-only；但 ET6 尚未提交 `Unity.Model` compile manifest 基线，因此 `export-build-provenance --dry-run` 以退出码 2 拒绝，没有把当前输出追认为 HEAD 证据。
 
 ## 第一套 OLD/NEW Golden Change
 

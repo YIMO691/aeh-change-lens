@@ -26,7 +26,7 @@
             "properties": {
               "path": { "type": "string", "minLength": 1 },
               "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
-              "kind": { "enum": ["UNITY", "EXTERNAL"] }
+              "kind": { "enum": ["UNITY", "EXTERNAL", "PROJECT_ATTESTED"] }
             }
           }
         }

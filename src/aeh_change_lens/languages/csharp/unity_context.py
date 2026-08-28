@@ -243,6 +243,7 @@ class UnityContextBuilder:
         unity_project_root: str | os.PathLike[str],
         *,
         portable_metadata_paths: bool = False,
+        project_output_bindings: dict[str, MetadataReferenceBinding] | None = None,
     ) -> None:
         supplied = Path(unity_project_root)
         if not supplied.exists() or _is_link_or_reparse(supplied):
@@ -252,6 +253,7 @@ class UnityContextBuilder:
             raise ValueError("expected a Unity project root containing Assets and ProjectSettings")
         self.root = root
         self.portable_metadata_paths = portable_metadata_paths
+        self.project_output_bindings = dict(project_output_bindings or {})
         self._hash_cache: dict[tuple[str, int, int], str] = {}
 
     def build(
@@ -333,9 +335,14 @@ class UnityContextBuilder:
         if missing_references:
             limitations.append(f"{len(missing_references)} 个 metadata reference 不存在。")
         unverified_outputs = [item for item in project_references if item.status == "BOUND_UNVERIFIED"]
+        attested_outputs = [item for item in project_references if item.status == "BOUND_ATTESTED"]
         missing_outputs = [item for item in project_references if item.status in {"MISSING", "OUTSIDE_UNITY_ROOT"}]
         if unverified_outputs:
             limitations.append(f"{len(unverified_outputs)} 个 ProjectReference 输出存在但未绑定到当前源码快照。")
+        if attested_outputs:
+            limitations.append(
+                f"{len(attested_outputs)} 个 ProjectReference 使用外部构建哈希证明，尚未独立复现。"
+            )
         if missing_outputs:
             limitations.append(f"{len(missing_outputs)} 个 ProjectReference 无可用输出或越出 Unity 根目录。")
         if missing_sources:
@@ -699,6 +706,11 @@ class UnityContextBuilder:
                     status = "ANALYZER_ONLY"
                 elif not inside_root:
                     status = "OUTSIDE_UNITY_ROOT"
+                elif assembly_name in self.project_output_bindings:
+                    script_assembly = self.project_output_bindings[assembly_name]
+                    if script_assembly.kind != "PROJECT_ATTESTED":
+                        raise ValueError("project output binding must be PROJECT_ATTESTED")
+                    status = "BOUND_ATTESTED"
                 else:
                     output = self.root / "Library" / "ScriptAssemblies" / f"{assembly_name}.dll"
                     if output.is_file() and not _is_link_or_reparse(output):

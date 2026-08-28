@@ -22,7 +22,7 @@
 | asmdef platform applicability | Implemented | Deterministic context fact | Current compile platform inferred from generated csproj defines |
 | asmdef Define Constraints | Implemented | Deterministic context fact | Line-level AND, `||`, and `!`; invalid expressions are `UNKNOWN` |
 | Version Defines | Partial | Deterministic context fact | Binds Unity and `packages-lock.json` versions; unparseable Git/path package versions are `UNKNOWN` |
-| ScriptAssemblies provenance | Partial | `PROJECT_UNVERIFIED` | Output exists but source/options/output closure is unproven |
+| ScriptAssemblies provenance | Partial | `PROJECT_ATTESTED` | Revision input/output hash closure can be attested; still an external Unity-build statement, not a reproducible build |
 | Inspector UnityEvent binding | Not implemented | `UNKNOWN` | Requires serialized assets or runtime evidence |
 | OLD/NEW stable-symbol mapping | Implemented | `CONFIRMED_STATIC` | Same Roslyn-qualified type/method identity only |
 | OLD/NEW structural mapping | Partial | `STRUCTURAL` | Unique kind/label/path only; ambiguous candidates are not guessed |

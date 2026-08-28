@@ -8,7 +8,7 @@
 
 - A Git revision is resolved to an immutable commit OID and read with `git ls-tree` and `git cat-file`.
 - `WORKTREE` reads tracked and non-ignored untracked files without modifying the index.
-- The selector includes `*.cs`, `*.asmdef`, `*.csproj`, fixed-path `.aeh-change-lens/compile-manifests/*.json` artifacts, `ProjectSettings/ProjectVersion.txt`, `Packages/manifest.json`, and `Packages/packages-lock.json`.
+- The selector includes `*.cs`, `*.asmdef`, `*.csproj`, fixed-path `.aeh-change-lens/compile-manifests/*.json` and `.aeh-change-lens/build-manifests/*.json` artifacts, `ProjectSettings/ProjectVersion.txt`, `Packages/manifest.json`, and `Packages/packages-lock.json`.
 
 ## Digest semantics
 

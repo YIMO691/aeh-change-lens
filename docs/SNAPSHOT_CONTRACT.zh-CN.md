@@ -8,7 +8,7 @@
 
 - Git revision：先解析成不可变 commit OID，再用 `git ls-tree` 与 `git cat-file` 读取对象；
 - `WORKTREE`：读取 tracked 与未忽略的 untracked 文件，不修改 index；
-- 当前选择器：`*.cs`、`*.asmdef`、`*.csproj`、固定目录 `.aeh-change-lens/compile-manifests/*.json`、`ProjectSettings/ProjectVersion.txt`、`Packages/manifest.json` 与 `Packages/packages-lock.json`。
+- 当前选择器：`*.cs`、`*.asmdef`、`*.csproj`、固定目录 `.aeh-change-lens/compile-manifests/*.json` 与 `.aeh-change-lens/build-manifests/*.json`、`ProjectSettings/ProjectVersion.txt`、`Packages/manifest.json` 与 `Packages/packages-lock.json`。
 
 ## 摘要语义
 

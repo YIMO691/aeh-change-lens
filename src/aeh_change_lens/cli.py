@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .languages.csharp import (
     AnalyzerGraphDiffer,
+    BuildProvenanceExporter,
     CompileManifestExporter,
     MappingHint,
     RevisionChangeAnalyzer,
@@ -74,6 +75,17 @@ def _parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true", help="只构建并验证清单，不写入工作区"
     )
     export_manifest.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
+    export_build = subcommands.add_parser(
+        "export-build-provenance",
+        help="为 Unity 外部生成的 ScriptAssemblies 输出导出哈希闭包证明",
+    )
+    export_build.add_argument("repository", help="Git 仓库根目录")
+    export_build.add_argument("unity_project", help="仓库内 Unity 项目的相对路径")
+    export_build.add_argument("--assembly", required=True, help="Assembly Definition name")
+    export_build.add_argument(
+        "--dry-run", action="store_true", help="只构建并验证证明，不写入工作区"
+    )
+    export_build.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
     return parser
 
 
@@ -164,6 +176,22 @@ def _export_compile_manifest(arguments: argparse.Namespace) -> dict:
     }
 
 
+def _export_build_provenance(arguments: argparse.Namespace) -> dict:
+    exporter = BuildProvenanceExporter(
+        Path(arguments.repository), arguments.unity_project
+    )
+    manifest = exporter.build(arguments.assembly)
+    unity_path = arguments.unity_project.replace("\\", "/").rstrip("/")
+    path = f"{unity_path}/.aeh-change-lens/build-manifests/{arguments.assembly}.json"
+    if not arguments.dry_run:
+        path = exporter.write(manifest)
+    return {
+        "status": "VALIDATED" if arguments.dry_run else "EXPORTED",
+        "path": path,
+        "manifest": manifest.to_dict(),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     arguments = parser.parse_args(argv)
@@ -194,6 +222,8 @@ def main(argv: list[str] | None = None) -> int:
             result = _analyze_change(arguments)
         elif arguments.command == "export-compile-manifest":
             result = _export_compile_manifest(arguments)
+        elif arguments.command == "export-build-provenance":
+            result = _export_build_provenance(arguments)
         else:  # pragma: no cover - argparse prevents this branch
             parser.error(f"unsupported command: {arguments.command}")
     except (SnapshotError, FileNotFoundError, ValueError) as error:

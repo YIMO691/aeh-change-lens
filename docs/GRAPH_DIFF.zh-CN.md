@@ -67,3 +67,14 @@ git add Unity/.aeh-change-lens/compile-manifests/Game.Runtime.json
 ```
 
 每次源码集合或内容变化后重新导出。清单对源码使用换行归一化后的语义 SHA-256，同时 revision snapshot 仍绑定原始字节 SHA-256；因此 Git 的 CRLF/LF 转换不会制造伪 stale，其他源码变化仍会拒绝。metadata 只记录文件名、种类和 SHA-256，不泄露本机绝对路径；分析时当前 csproj 仅作为同哈希 DLL 的 locator。若某个 revision 同时缺少 csproj 与清单、清单摘要被改写或源码语义哈希不匹配，命令在 Worker 前 fail closed。工具不会用 NEW 编译选项代替 OLD，也不会启动 Unity。没有预先建立清单基线的旧提交不能事后猜测恢复。
+
+若需要让 ProjectReference 的现有 Unity 产物进入语义分析，应在 Unity 已完成外部构建后、按依赖程序集执行：
+
+```powershell
+change-lens export-compile-manifest D:\game-repo Unity --assembly Dependency --pretty
+change-lens export-build-provenance D:\game-repo Unity --assembly Dependency --pretty
+git add Unity/.aeh-change-lens/compile-manifests/Dependency.json `
+        Unity/.aeh-change-lens/build-manifests/Dependency.json
+```
+
+build provenance 绑定 compile manifest digest、asmdef、ProjectVersion、package lock、直接项目输入 DLL 哈希和输出 DLL 哈希。导出时还要求输出时间不早于当前观察到的源码和编译输入，降低“源码已改但 Unity 尚未重建”的误操作。只有同 revision 文件闭包成立且本机输出逐字节匹配时，引用才标为 `PROJECT_ATTESTED`；Worker 会再次验哈希。历史输出不在本机或哈希不符时降为 `PARTIAL`，不会替换为 NEW 输出。即使绑定成功，整体 Context 仍披露“外部构建尚未独立复现”的 limitation。该等级明确属于 `EXTERNAL_UNITY_BUILD / ATTESTED_HASH_CLOSURE`，不是可复现构建证明。

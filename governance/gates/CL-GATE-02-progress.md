@@ -1,7 +1,7 @@
 # CL-GATE-02 progress — Real Unity metadata vertical slice
 
 - Status: `IN_PROGRESS` — this is not exit-Gate evidence
-- Date: `2026-08-27`
+- Date: `2026-08-28`
 - Primary work package: `CL-WP-02`
 - Pilot input: local `D:\ares\project\ET6\Unity` (read-only)
 - Unity version: `2020.3.26f1c1`
@@ -46,6 +46,12 @@
   metadata names/hashes and ProjectReference entries, without absolute paths;
 - per-revision manifest canonical-digest and stale-source rejection;
 - hash-qualified use of a live csproj only as a local metadata DLL locator.
+- deterministic `export-build-provenance` for externally produced Unity assemblies;
+- revision-bound closure over compile manifest, asmdef, ProjectVersion, package lock,
+  direct project-input DLL hashes and output DLL hash;
+- `PROJECT_ATTESTED` Worker references with a second Worker-side digest check;
+- strict separation between external hash attestation and reproducible-build proof;
+- historical output mismatch degrades to `PARTIAL`; a stale worktree output fails closed.
 
 ## ET6 read-only measurements
 
@@ -77,13 +83,18 @@ compile_manifest_metadata_references=221
 compile_manifest_project_references=5
 compile_manifest_project_sha256=867c661b3e8becf7fa6da7177a485d984f65d402112f900a26b1741285dd70da
 compile_manifest_digest=c389dc3058fb284c5c6cf15b3e68a08cd90823e4eedb975455e29f3a9ce2d88d
+script_assembly_outputs=4
+analyzer_only_project_references=1
+build_provenance_status=REJECTED_NO_COMPILE_MANIFEST_BASELINE
 ```
 
 The graph recursively follows the five root `ProjectReference` entries. Four
-corresponding `Library/ScriptAssemblies` outputs exist, but are explicitly
-`BOUND_UNVERIFIED`: their bytes are not accepted by the Worker until source,
-compiler options and output provenance can be bound. The root context and graph
-therefore correctly remain `PARTIAL`.
+corresponding `Library/ScriptAssemblies` outputs exist and one reference is
+analyzer-only. The implementation can now accept a `PROJECT_ATTESTED` output
+when its revision contains both compile and build-provenance manifests. ET6 has
+no committed compile-manifest baseline, so `export-build-provenance --dry-run`
+correctly exited with code 2 and did not retroactively attest these outputs.
+The root context and graph therefore correctly remain `PARTIAL`.
 
 All 632 `Unity.Model` sources and the package lock were read through the
 worktree `SnapshotBinding`.
@@ -132,7 +143,7 @@ Latest result:
 
 ```text
 Build succeeded: 0 warnings, 0 errors
-Ran 69 tests in 114.643s
+Ran 76 tests in 145.536s
 OK (skipped=1)
 ```
 
@@ -192,7 +203,8 @@ remain unmapped and explicitly limited.
 
 ## Remaining before CL-GATE-02
 
-- bind verifiable build provenance for generated ScriptAssemblies outputs;
+- upgrade external `PROJECT_ATTESTED` statements to independently reproducible
+  build receipts with pinned Unity/compiler toolchains;
 - cover additional platform aliases and non-registry package-version forms;
 - add alias-aware state flow, event removal and Inspector bindings;
 - expand from 1 Golden Change to the planned 10–20 cases;
