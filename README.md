@@ -34,6 +34,8 @@ AEH Change Lens 是一个只读的代码变更解释工具。它把一次 AI 辅
 - [C#/Unity capability matrix](docs/CAPABILITY_MATRIX.en.md)
 - [OLD/NEW 图差异契约](docs/GRAPH_DIFF.zh-CN.md)
 - [OLD/NEW graph diff contract](docs/GRAPH_DIFF.en.md)
+- [中文 Change Story HTML 报告](docs/CHANGE_STORY.zh-CN.md)
+- [Change Story HTML report](docs/CHANGE_STORY.en.md)
 - [机器可读治理契约](governance/proposal.yaml)
 
 当前已实现的开发者入口：
@@ -46,13 +48,15 @@ change-lens graph-diff <old-result.json> <new-result.json> --mapping-hints <hint
 change-lens export-compile-manifest <repository-root> <unity-project-relative-path> --assembly <name> --pretty
 change-lens export-build-provenance <repository-root> <unity-project-relative-path> --assembly <name> --pretty
 change-lens analyze-change <repository-root> <unity-project-relative-path> --assembly <name> --base <commit> --target WORKTREE --request-id <id> --pretty
+change-lens explain <repository-root> <unity-project-relative-path> --assembly <name> --base <commit> --target WORKTREE --request-id <id> --intent-evidence <intent.json> --analysis-output <analysis.json> --output <report.html> --pretty
+change-lens render-report <change-analysis.json> --intent-evidence <intent.json> --output <report.html> --pretty
 ```
 
 该命令只读取 Git 对象和工作树中的受支持源码，输出原/新版本的相对路径、对象 ID、逐文件 SHA-256、清单摘要和 rename 映射；不 checkout、不编译或执行目标项目代码。
 
-Roslyn Worker 的当前纵切可以提取类型、方法、调用、分支、异常、返回、状态读写、生命周期、Coroutine/yield、async/await、C# event/delegate、UnityEvent、序列化引用、组件查找和动态未知关系。Unity Context Builder 已执行 asmdef 平台、Define Constraints 与 Version Defines 判定，并将 Unity 版本、锁定包版本、依赖和 metadata 纳入摘要绑定。`graph-diff` 已能将 OLD/NEW Worker 图映射为确定性的新增、删除、更新、移动与不变链路；稳定符号可静态确认，人工重命名提示和唯一结构映射保持较低置信度，歧义候选不猜测。程序集图会递归跟随 ProjectReference，但 `Library/ScriptAssemblies` 输出在缺少源码快照来源证明时保持 `PROJECT_UNVERIFIED`。`roslyn-input` 只从已绑定的 Git/工作树快照取源码字节，并在装配前后检查 stale；ET6/Unity 2020.3 的只读试点已覆盖 UTF-8、UTF-8 BOM 和 GB18030 历史源码。
+Roslyn Worker 的当前纵切可以提取类型、方法、调用、分支、异常、返回、状态读写、生命周期、Coroutine/yield、async/await、C# event/delegate、UnityEvent、序列化引用、组件查找和动态未知关系。Unity Context Builder 已执行 asmdef 平台、Define Constraints 与 Version Defines 判定，并将 Unity 版本、锁定包版本、依赖和 metadata 纳入摘要绑定。`graph-diff` 已能将 OLD/NEW Worker 图映射为确定性的新增、删除、更新、移动与不变链路；稳定符号可静态确认，人工重命名提示和唯一结构映射保持较低置信度，歧义候选不猜测。`explain` 进一步将差异投影为中文优先、无脚本、完全离线的 Change Story HTML，严格分开代码事实、来源证据和意图推断。程序集图会递归跟随 ProjectReference，但 `Library/ScriptAssemblies` 输出在缺少源码快照来源证明时保持 `PROJECT_UNVERIFIED`。`roslyn-input` 只从已绑定的 Git/工作树快照取源码字节，并在装配前后检查 stale；ET6/Unity 2020.3 的只读试点已覆盖 UTF-8、UTF-8 BOM 和 GB18030 历史源码。
 
-`CL-GATE-02` 尚未通过：当前只有 1 套人工标注 Golden Change，尚未达到计划的 10–20 套；`ScriptAssemblies` 当前只有外部构建哈希闭包证明，尚不是可复现构建；状态读取仍不覆盖别名与运行时对象，事件移除和 Inspector 绑定尚未补齐；Viewer 也尚未实现。
+`CL-GATE-02` 尚未通过：当前只有 1 套人工标注 Golden Change，尚未达到计划的 10–20 套；`ScriptAssemblies` 当前只有外部构建哈希闭包证明，尚不是可复现构建；状态读取仍不覆盖别名与运行时对象，事件移除和 Inspector 绑定尚未补齐。Viewer 的首个静态 HTML 纵切已经实现，但尚无大型真实变更上的可用性验收、筛选、缩放、搜索或 IDE 集成。
 
 `analyze-change` 要求 OLD 与 NEW snapshot 各自包含生成的 `<Assembly>.csproj`，或包含由 `export-compile-manifest` 预先导出并提交的 `.aeh-change-lens/compile-manifests/<Assembly>.json`。清单绑定 define、精确源码集合及语义哈希、metadata 文件名/哈希和 ProjectReference，不保存本机绝对 DLL 路径。源码变化后未重新导出会 fail closed；当前工作树 csproj 只能按文件名与 SHA-256 定位本机 DLL，不能向历史版本注入源码或编译选项。没有建立清单基线的旧提交仍不会被追溯猜测。
 
@@ -97,6 +101,10 @@ source semantics, and never substitutes NEW compile options for OLD.
 `export-build-provenance` can additionally attest the exact input/output hash
 closure of an externally produced `ScriptAssemblies` DLL. Such a reference is
 `PROJECT_ATTESTED`, not a claim that Change Lens reproduced the Unity build.
+
+`explain` now creates a self-contained Chinese-first Change Story HTML report.
+It keeps code facts, supplied source statements, and intent hypotheses in
+separate layers; it never claims to reconstruct hidden model reasoning.
 
 ## License
 

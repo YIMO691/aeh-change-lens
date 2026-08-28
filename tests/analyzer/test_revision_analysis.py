@@ -162,6 +162,43 @@ class RevisionChangeAnalyzerTests(unittest.TestCase):
         validate("change-analysis.schema.json", result)
         self.assertEqual("CLI-REVISION", result["request_id"])
 
+    def test_cli_explain_runs_old_new_analysis_and_writes_offline_story(self) -> None:
+        repository = RevisionAnalysisRepository(self.root)
+        repository.modify_target()
+        report_path = self.root.parent / f"{self.root.name}-change-story.html"
+        analysis_path = self.root.parent / f"{self.root.name}-change-analysis.json"
+        intent_path = self.root.parent / f"{self.root.name}-intent.json"
+        intent_path.write_text(json.dumps({
+            "schema_version": "1.0.0",
+            "source": "revision integration fixture",
+            "user_goal": "拒绝非正数增量。",
+            "ai_plan": ["在写入计数器前增加条件判断。"],
+        }), encoding="utf-8")
+        self.addCleanup(report_path.unlink, missing_ok=True)
+        self.addCleanup(analysis_path.unlink, missing_ok=True)
+        self.addCleanup(intent_path.unlink, missing_ok=True)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            exit_code = main([
+                "explain", os.fspath(self.root), "Unity",
+                "--assembly", "Game", "--base", repository.base,
+                "--target", "WORKTREE", "--request-id", "CLI-EXPLAIN",
+                "--intent-evidence", os.fspath(intent_path),
+                "--analysis-output", os.fspath(analysis_path),
+                "--output", os.fspath(report_path), "--pretty",
+            ])
+
+        result = json.loads(output.getvalue())
+        rendered = report_path.read_text(encoding="utf-8")
+        retained_analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+        self.assertEqual(0, exit_code)
+        self.assertEqual("CLI-EXPLAIN", retained_analysis["request_id"])
+        self.assertEqual(retained_analysis["canonical_digest"], result["analysis_digest"])
+        self.assertIn("原链路", rendered)
+        self.assertIn("新链路", rendered)
+        self.assertIn("拒绝非正数增量", rendered)
+        self.assertNotIn("<script", rendered.lower())
+
     def test_two_immutable_git_revisions_are_analyzed_without_checkout(self) -> None:
         repository = RevisionAnalysisRepository(self.root)
         repository.modify_target()

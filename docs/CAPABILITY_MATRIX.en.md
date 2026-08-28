@@ -30,6 +30,8 @@
 | Golden Change | Partial | Human annotation + deterministic digest | 1 case currently; target is 10–20 |
 | Committable compile manifest | Implemented | Snapshot-bound | Export at baseline and after source changes; old commits are not guessed retroactively |
 | Historical Git dual-context analysis | Partial | Snapshot-bound | Each lane needs a generated csproj or source-matching manifest; unavailable references remain `PARTIAL` |
+| Chinese Change Story HTML | First vertical slice implemented | Inherits layered evidence confidence | Script-free, offline single file; large graphs are deterministically truncated and disclosed |
+| AI change rationale | Partial | `SOURCE_EVIDENCE` / `INFERRED` | Can import goals, plans, and commit text; does not read hidden reasoning or present code inference as actual intent |
 
 Define-constraint evaluation follows the [Unity 2020.3 Assembly Definition properties](https://docs.unity3d.com/2020.3/Documentation/Manual/class-AssemblyDefinitionImporter.html): all constraint lines must pass, `||` is allowed within a line, and `!` negates a symbol.
 

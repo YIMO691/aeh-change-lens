@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
@@ -17,6 +19,7 @@ from .languages.csharp import (
 )
 from .snapshot import SnapshotResolver
 from .snapshot.errors import SnapshotError
+from .reporting import ChangeStoryBuilder, write_change_story_report
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -64,6 +67,32 @@ def _parser() -> argparse.ArgumentParser:
     analyze_change.add_argument("--request-id", required=True)
     analyze_change.add_argument("--mapping-hints", help="可选的人工复核映射提示 JSON 数组")
     analyze_change.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
+    explain = subcommands.add_parser(
+        "explain", help="一键分析 OLD/NEW Unity 快照并生成中文 Change Story HTML 报告"
+    )
+    explain.add_argument("repository", help="Git 仓库根目录")
+    explain.add_argument("unity_project", help="仓库内 Unity 项目的相对路径")
+    explain.add_argument("--assembly", required=True, help="Assembly Definition name")
+    explain.add_argument("--base", required=True, help="OLD Git revision")
+    explain.add_argument("--target", default="WORKTREE", help="NEW Git revision 或 WORKTREE")
+    explain.add_argument("--request-id", required=True)
+    explain.add_argument("--output", required=True, help="输出的单文件 HTML 报告路径")
+    explain.add_argument("--analysis-output", help="可选：同时保留完整 change-analysis JSON")
+    explain.add_argument("--mapping-hints", help="可选的人工复核映射提示 JSON 数组")
+    explain.add_argument(
+        "--intent-evidence", help="可选的用户目标、AI 计划和提交说明 JSON"
+    )
+    explain.add_argument("--title", default="代码修改逻辑链路", help="报告标题")
+    explain.add_argument("--pretty", action="store_true", help="格式化命令结果 JSON")
+    render_report = subcommands.add_parser(
+        "render-report", help="将已有 change-analysis JSON 渲染为中文 Change Story HTML"
+    )
+    render_report.add_argument("analysis", help="change-analysis JSON")
+    render_report.add_argument("--output", required=True, help="输出的单文件 HTML 报告路径")
+    render_report.add_argument("--source-root", help="可选：用于 NEW 工作树文件链接的 Unity 项目根目录")
+    render_report.add_argument("--intent-evidence", help="可选的意图来源证据 JSON")
+    render_report.add_argument("--title", default="代码修改逻辑链路", help="报告标题")
+    render_report.add_argument("--pretty", action="store_true", help="格式化命令结果 JSON")
     export_manifest = subcommands.add_parser(
         "export-compile-manifest",
         help="从当前 Unity 生成 csproj 导出可提交、可验证的编译清单",
@@ -160,6 +189,65 @@ def _analyze_change(arguments: argparse.Namespace) -> dict:
     )
 
 
+def _write_json(path_value: str, value: object, *, pretty: bool) -> str:
+    path = Path(path_value).resolve()
+    if path.exists() and path.is_dir():
+        raise ValueError("JSON output path must be a file")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(json.dumps(
+                value, ensure_ascii=False, sort_keys=True,
+                separators=None if pretty else (",", ":"), indent=2 if pretty else None,
+            ) + "\n")
+        os.replace(temporary, path)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return os.fspath(path)
+
+
+def _story_result(
+    analysis: dict, arguments: argparse.Namespace, *, repository: str | None
+) -> dict:
+    intent = _read_json(arguments.intent_evidence, dict) if arguments.intent_evidence else None
+    story = ChangeStoryBuilder().build(
+        analysis, title=arguments.title, intent_evidence=intent
+    )
+    report_path = write_change_story_report(
+        arguments.output, story, repository_root=repository
+    )
+    return {
+        "status": story["status"],
+        "report_path": os.fspath(report_path),
+        "story_id": story["story_id"],
+        "story_digest": story["canonical_digest"],
+        "analysis_digest": story["analysis_digest"],
+    }
+
+
+def _explain(arguments: argparse.Namespace) -> dict:
+    analysis = _analyze_change(arguments)
+    source_root = Path(arguments.repository) / Path(arguments.unity_project)
+    result = _story_result(analysis, arguments, repository=os.fspath(source_root))
+    if arguments.analysis_output:
+        result["analysis_path"] = _write_json(
+            arguments.analysis_output, analysis, pretty=arguments.pretty
+        )
+    return result
+
+
+def _render_report(arguments: argparse.Namespace) -> dict:
+    analysis = _read_json(arguments.analysis, dict)
+    return _story_result(analysis, arguments, repository=arguments.source_root)
+
+
 def _export_compile_manifest(arguments: argparse.Namespace) -> dict:
     exporter = CompileManifestExporter(
         Path(arguments.repository), arguments.unity_project
@@ -220,6 +308,10 @@ def main(argv: list[str] | None = None) -> int:
             result = _graph_diff(arguments)
         elif arguments.command == "analyze-change":
             result = _analyze_change(arguments)
+        elif arguments.command == "explain":
+            result = _explain(arguments)
+        elif arguments.command == "render-report":
+            result = _render_report(arguments)
         elif arguments.command == "export-compile-manifest":
             result = _export_compile_manifest(arguments)
         elif arguments.command == "export-build-provenance":

@@ -184,6 +184,8 @@ Bundle 必须记录：
 
 产出：程序集、类型、方法、调用、分支、异常和副作用节点；解析 `.asmdef`、平台/define 条件和 Unity 编译引用；识别 MonoBehaviour 生命周期、Coroutine、`async/await`、delegate/event/UnityEvent、序列化引用及常见组件访问关系；提供能力矩阵和限制。
 
+产品对齐切片：为尽早验证“原链路 → 新链路”是否真正可理解，`CL-WP-02` 允许生成一个只消费当前确定性分析结果的静态 Change Story 报告。该切片不得宣称 `CL-WP-05/06` 已激活或对应 Gate 已通过；完整解释验证、可访问 Viewer 和试点测量仍按原依赖顺序执行。
+
 `CL-GATE-02`：Golden Graph 与人工标注一致；Roslyn SemanticModel 可用时才把跨文件符号关系标为 confirmed；缺少 Unity 程序集、条件编译分支或工程上下文时返回显式 partial；反射、字符串消息、UnityEvent Inspector 绑定和动态调用不冒充 confirmed。
 
 ### CL-WP-03 Semantic Differ
