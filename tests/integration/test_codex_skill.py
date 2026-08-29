@@ -33,7 +33,8 @@ class CodexSkillIntegrationTests(unittest.TestCase):
         self.assertIn("--allow-syntax-partial", workflow)
         self.assertIn("--progress", workflow)
         self.assertIn("--story-output", workflow)
-        self.assertIn("quick_view.summary_zh", workflow)
+        self.assertIn("visual_map.headline_zh", workflow)
+        self.assertIn("PARALLEL_FACTS", workflow)
         self.assertIn("deep_dive.stages", workflow)
 
     def test_source_checkout_runner_needs_no_package_install(self) -> None:

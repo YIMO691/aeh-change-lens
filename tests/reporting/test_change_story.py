@@ -142,6 +142,36 @@ def analysis() -> dict:
     }
 
 
+def test_only_analysis() -> dict:
+    payload = copy.deepcopy(analysis())
+    nodes = []
+    for index, label in enumerate((
+        "Program.ReadRepoFile(params string[])",
+        "Program.VerifyActualExportedConfiguration()",
+        "Program.VerifyProtocolFieldNumbers()",
+    )):
+        node = _node("NEW", f"test-{index}", "METHOD", label, 100 + index * 20, "ADDED")
+        node["location"]["path"] = "Tests/MonsterCombo/Program.cs"
+        nodes.append(node)
+    payload["diff"]["nodes"] = nodes
+    payload["diff"]["edges"] = []
+    payload["diff"]["mappings"] = []
+    payload["diff"]["summary"] = {
+        "old_nodes": 0,
+        "new_nodes": 3,
+        "mapped_nodes": 0,
+        "added_nodes": 3,
+        "removed_nodes": 0,
+        "updated_node_pairs": 0,
+        "moved_node_pairs": 0,
+        "added_edges": 0,
+        "removed_edges": 0,
+        "unchanged_edge_pairs": 0,
+    }
+    payload["canonical_digest"] = "8" * 64
+    return payload
+
+
 class ChangeStoryTests(unittest.TestCase):
     def test_story_is_deterministic_schema_valid_and_separates_claim_layers(self) -> None:
         evidence = {
@@ -169,6 +199,12 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertLessEqual(len(first["quick_view"]["new_flow"]), 8)
         self.assertTrue(first["quick_view"]["old_flow"])
         self.assertTrue(first["quick_view"]["new_flow"])
+        self.assertEqual("1.2.0", first["schema_version"])
+        self.assertEqual("MODIFIED", first["visual_map"]["change_shape"])
+        self.assertEqual("VERIFIED_FLOW", first["visual_map"]["relationship_mode"])
+        self.assertLessEqual(len(first["visual_map"]["changes"]), 3)
+        self.assertLessEqual(len(first["visual_map"]["before"]), 3)
+        self.assertLessEqual(len(first["visual_map"]["after"]), 3)
         self.assertTrue(first["deep_dive"]["stages"])
         self.assertIn("来源证据", first["deep_dive"]["method_note_zh"])
 
@@ -194,10 +230,80 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertIn("快速理解", rendered)
         self.assertIn("详细思路拆解", rendered)
         self.assertIn('id="tab-quick" checked', rendered)
-        self.assertIn("到底改了什么", rendered)
+        self.assertIn("一眼看懂", rendered)
+        self.assertIn('data-change-shape="MODIFIED"', rendered)
+        self.assertIn('aria-label="版本变化，不表示调用"', rendered)
         self.assertIn("奖励 &lt;script&gt;alert(1)&lt;/script&gt;", rendered)
         self.assertNotIn("<script", rendered.lower())
         self.assertNotIn("https://", rendered)
+
+    def test_test_only_change_uses_parallel_checks_instead_of_empty_old_new_lanes(self) -> None:
+        story = ChangeStoryBuilder().build(test_only_analysis())
+        rendered = HtmlChangeStoryRenderer().render(story)
+        visual = story["visual_map"]
+
+        validate("change-story.schema.json", story)
+        self.assertEqual("TEST_ONLY", visual["change_shape"])
+        self.assertEqual("PARALLEL_FACTS", visual["relationship_mode"])
+        self.assertEqual(3, len(visual["changes"]))
+        self.assertIn("测试保障", visual["headline_zh"])
+        self.assertIn("不表示它们按显示顺序相互调用", visual["relationship_note_zh"])
+        self.assertIn('aria-label="并列事实，不表示调用"', rendered)
+        self.assertNotIn('aria-label="版本变化，不表示调用"', rendered)
+        self.assertNotIn("原版本没有进入业务聚焦层的显著步骤", rendered)
+
+    def test_new_editor_tool_uses_added_shape_with_explicit_absence_context(self) -> None:
+        payload = test_only_analysis()
+        for node in payload["diff"]["nodes"]:
+            node["location"]["path"] = "Unity/Assets/Editor/Combo/Tool.cs"
+        story = ChangeStoryBuilder().build(payload)
+
+        self.assertEqual("ADDED", story["visual_map"]["change_shape"])
+        self.assertIn("旧版本未发现对应结构信号", story["visual_map"]["before"][0]["label_zh"])
+        self.assertIn("Unity 编辑器工具", story["visual_map"]["after"][0]["label_zh"])
+
+    def test_removed_and_configuration_changes_use_shape_specific_maps(self) -> None:
+        for role, change, path, expected in (
+            ("OLD", "REMOVED", "Unity/Codes/Model/Feature.cs", "REMOVED"),
+            ("NEW", "ADDED", "Config/MonsterComboRule.cs", "CONFIG_PROTOCOL"),
+        ):
+            with self.subTest(expected=expected):
+                payload = copy.deepcopy(analysis())
+                node = _node(role, expected.lower(), "TYPE", "Game.MonsterComboRule", 10, change)
+                node["location"]["path"] = path
+                payload["diff"]["nodes"] = [node]
+                payload["diff"]["edges"] = []
+                payload["diff"]["mappings"] = []
+                payload["diff"]["summary"] = {
+                    "old_nodes": 1 if role == "OLD" else 0,
+                    "new_nodes": 1 if role == "NEW" else 0,
+                    "mapped_nodes": 0,
+                    "added_nodes": 1 if change == "ADDED" else 0,
+                    "removed_nodes": 1 if change == "REMOVED" else 0,
+                    "updated_node_pairs": 0,
+                    "moved_node_pairs": 0,
+                    "added_edges": 0,
+                    "removed_edges": 0,
+                    "unchanged_edge_pairs": 0,
+                }
+
+                story = ChangeStoryBuilder().build(payload)
+
+                validate("change-story.schema.json", story)
+                self.assertEqual(expected, story["visual_map"]["change_shape"])
+
+    def test_empty_business_focus_still_produces_a_schema_valid_truthful_map(self) -> None:
+        payload = copy.deepcopy(analysis())
+        payload["diff"]["nodes"] = []
+        payload["diff"]["edges"] = []
+        payload["diff"]["mappings"] = []
+        payload["diff"]["summary"] = {key: 0 for key in payload["diff"]["summary"]}
+
+        story = ChangeStoryBuilder().build(payload)
+
+        validate("change-story.schema.json", story)
+        self.assertEqual("PARALLEL", story["visual_map"]["change_shape"])
+        self.assertIn("没有进入快速视图", story["visual_map"]["changes"][0]["label_zh"])
 
     def test_generated_noise_stays_in_technical_evidence_not_quick_view(self) -> None:
         payload = copy.deepcopy(analysis())

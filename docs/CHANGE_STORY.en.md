@@ -51,7 +51,9 @@ Source statements are never promoted to code facts merely because they came from
 
 ## Two reading levels
 
-The default quick view contains a one-sentence summary, an explicitly labeled mental model, up to five business-change cards, at most eight OLD and NEW focus steps, impact scope, and up to four priority risks. Long signatures, repeated conditions, generated-code counts, and full graph relationships do not occupy the landing view.
+The default landing view is Change Map Lite. It classifies the evidence as `MODIFIED`, `ADDED`, `REMOVED`, `TEST_ONLY`, `CONFIG_PROTOCOL`, or `PARALLEL`, then shows a bounded Before / Core change / After map with at most three items per column. The columns are always revision comparison, never calls between the displayed items. When changed edge evidence exists the note directs readers to the detailed relationships; otherwise a parallel marker explicitly avoids implying call order. Added, removed, and test-only work no longer produces empty OLD/NEW flow boxes.
+
+Impact scope and the first material risk stay visible. The mental model and up to five area cards move into an optional support disclosure, while long signatures, repeated conditions, generated-code counts, and full graph relationships stay out of the landing view.
 
 The detailed view groups representative objects, relationships, and new decision points by configuration, server, protocol, Unity Editor tooling, client, runtime, and test stages. Full claims, raw paths, symbol tables, impacts, and limitations remain available under collapsed technical evidence.
 

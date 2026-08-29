@@ -293,3 +293,35 @@ Editor lifecycle callbacks no longer displace the Window, Excel Repository and
 Validator responsibilities in the quick summary. Its target-status hash also
 remained identical before and after analysis
 (`c462d9256d2c29da83ef0780673cafa912944d00aac30e3dc04c5af8886b54a3`).
+
+## 2026-08-29 usability increment: Change Map Lite
+
+This is user-comprehension evidence only. It does not close `CL-GATE-02`, turn
+structural reachability into runtime impact, or promote presentation heuristics
+to analyzer truth.
+
+- Change Story contract `1.2.0` adds a bounded `visual_map` with explicit
+  `MODIFIED`, `ADDED`, `REMOVED`, `TEST_ONLY`, `CONFIG_PROTOCOL` and `PARALLEL`
+  shapes;
+- the quick view presents at most three Before, Core change and After items,
+  followed by impact and the first material risk;
+- the three columns are always revision comparison, never an implied call
+  sequence; changed edge evidence is disclosed separately and parallel facts
+  remain explicitly unordered;
+- added, removed and test-only changes no longer produce empty OLD/NEW flow
+  boxes, while the detailed evidence view remains available unchanged;
+- the Codex Skill now reads `visual_map` first and is forbidden from narrating
+  `PARALLEL_FACTS` as a call chain.
+
+The complete local suite passed 99 tests with 4 platform-dependent skips. The
+.NET Worker built with 0 warnings and 0 errors, both repository and installed
+Skill copies passed validation, and the final HTML remained script-free with no
+remote resources.
+
+Two read-only Ares2 pilots exercised different presentation shapes. A 13-file
+Unity Editor/test snapshot produced a `MODIFIED` map centered on Auto Fixer,
+Change Tracker and Export Runner roles. The worktree then changed independently;
+the final current snapshot contained one changed C# test file and produced a
+`TEST_ONLY` map centered on repository-file, exported-configuration and protocol
+field validation. The final target fingerprint was identical before and after
+analysis (`0a0012afe32bd096bc8fd1cc3b89d52ec814621e43da858a5bf9afeadd14efa7`).

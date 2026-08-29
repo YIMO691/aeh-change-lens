@@ -6,11 +6,11 @@
   "additionalProperties": false,
   "required": [
     "schema_version", "story_id", "language", "status", "title",
-    "analysis_digest", "revisions", "overview", "quick_view", "deep_dive", "lanes", "changes",
+    "analysis_digest", "revisions", "overview", "quick_view", "visual_map", "deep_dive", "lanes", "changes",
     "claims", "impacts", "limitations", "canonical_digest"
   ],
   "properties": {
-    "schema_version": { "const": "1.1.0" },
+    "schema_version": { "const": "1.2.0" },
     "story_id": { "type": "string", "pattern": "^story:[a-f0-9]{24}$" },
     "language": { "const": "zh-CN" },
     "status": { "enum": ["FRESH", "PARTIAL"] },
@@ -34,6 +34,7 @@
       }
     },
     "quick_view": { "$ref": "#/$defs/quick_view" },
+    "visual_map": { "$ref": "#/$defs/visual_map" },
     "deep_dive": { "$ref": "#/$defs/deep_dive" },
     "lanes": {
       "type": "object", "additionalProperties": false,
@@ -126,6 +127,64 @@
         "impact_summary_zh": { "type": "string", "minLength": 1 },
         "impact_summary_en": { "type": "string", "minLength": 1 },
         "risk_cards": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/risk_card" } }
+      }
+    },
+    "visual_item": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "item_id", "role", "label_zh", "label_en", "change", "confidence",
+        "evidence_refs", "locations"
+      ],
+      "properties": {
+        "item_id": { "type": "string", "pattern": "^visual:[a-f0-9]{16}$" },
+        "role": { "enum": ["BEFORE", "CHANGE", "AFTER"] },
+        "label_zh": { "type": "string", "minLength": 1 },
+        "label_en": { "type": "string", "minLength": 1 },
+        "change": {
+          "enum": ["ADDED", "REMOVED", "UPDATED", "MOVED", "RENAMED", "RENAMED_AND_MOVED", "CONTEXT"]
+        },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" },
+        "evidence_refs": {
+          "type": "array", "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "locations": {
+          "type": "array", "maxItems": 6,
+          "items": { "$ref": "common.schema.json#/$defs/source_location" }
+        }
+      }
+    },
+    "visual_map": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "change_shape", "relationship_mode", "headline_zh", "headline_en",
+        "before_label_zh", "change_label_zh", "after_label_zh",
+        "before_label_en", "change_label_en", "after_label_en",
+        "before", "changes", "after", "relationship_note_zh", "relationship_note_en",
+        "impact_zh", "impact_en", "risk_zh", "risk_en"
+      ],
+      "properties": {
+        "change_shape": {
+          "enum": ["MODIFIED", "ADDED", "REMOVED", "TEST_ONLY", "CONFIG_PROTOCOL", "PARALLEL"]
+        },
+        "relationship_mode": { "enum": ["VERIFIED_FLOW", "PARALLEL_FACTS"] },
+        "headline_zh": { "type": "string", "minLength": 1 },
+        "headline_en": { "type": "string", "minLength": 1 },
+        "before_label_zh": { "type": "string", "minLength": 1 },
+        "change_label_zh": { "type": "string", "minLength": 1 },
+        "after_label_zh": { "type": "string", "minLength": 1 },
+        "before_label_en": { "type": "string", "minLength": 1 },
+        "change_label_en": { "type": "string", "minLength": 1 },
+        "after_label_en": { "type": "string", "minLength": 1 },
+        "before": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "$ref": "#/$defs/visual_item" } },
+        "changes": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "$ref": "#/$defs/visual_item" } },
+        "after": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "$ref": "#/$defs/visual_item" } },
+        "relationship_note_zh": { "type": "string", "minLength": 1 },
+        "relationship_note_en": { "type": "string", "minLength": 1 },
+        "impact_zh": { "type": "string", "minLength": 1 },
+        "impact_en": { "type": "string", "minLength": 1 },
+        "risk_zh": { "type": "string", "minLength": 1 },
+        "risk_en": { "type": "string", "minLength": 1 }
       }
     },
     "stage_relationship": {

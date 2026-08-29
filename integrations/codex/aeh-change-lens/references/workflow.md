@@ -78,9 +78,12 @@ Require exit code zero, present HTML/story/analysis files, and matching analysis
 
 For quick understanding, report:
 
-- `quick_view.summary_zh`;
-- the OLD/NEW focus steps without raw signatures;
-- change-card impact areas and priority risks.
+- `visual_map.change_shape` and `visual_map.headline_zh`;
+- the bounded `before` / `changes` / `after` items without raw signatures;
+- `visual_map.impact_zh` and `visual_map.risk_zh`;
+- whether `relationship_mode` is `VERIFIED_FLOW` or `PARALLEL_FACTS`.
+
+Do not narrate `PARALLEL_FACTS` in display order as a call chain. Use `quick_view` only for optional area and mental-model context after the visual map.
 
 For a requested detailed breakdown, additionally report:
 

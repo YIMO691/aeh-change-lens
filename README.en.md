@@ -88,6 +88,12 @@ python .\run_change_lens.py --help
 
 See [Change Story](docs/CHANGE_STORY.en.md) for the complete command and intent-evidence contract.
 
+## Output
+
+The default landing view is Change Map Lite. It classifies a change as modified, added, removed, test-only, configuration/protocol, or parallel facts, then presents one bounded Before / Core change / After map with impact and the first material risk. Arrows appear only when the analysis contains changed relationship evidence; otherwise the report explicitly presents parallel facts without implying call order.
+
+The detailed view retains staged implementation evidence, decisions, raw OLD/NEW chains, claims, impacts, and limitations. The optional `change-story.json` lets Codex read the focused map before opening the full analysis.
+
 ## Compile baseline
 
 Trustworthy historical analysis requires each lane to contain either its matching generated Unity `.csproj` or a revision-bound compile manifest. Repositories that ignore generated projects should establish a baseline while the relevant code is clean:

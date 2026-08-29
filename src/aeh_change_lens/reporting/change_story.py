@@ -61,6 +61,13 @@ _MAX_QUICK_CARDS = 5
 _MAX_FLOW_STEPS = 8
 _MAX_STAGE_ITEMS = 6
 _MAX_DECISIONS = 6
+_MAX_MAP_ITEMS = 3
+_MAX_MAP_CHANGES = 3
+
+_ROLE_TYPE_PATTERN = re.compile(
+    r"(?:Window|Repository|Validator|Service|Controller|Manager|AutoFixer|"
+    r"ChangeTracker|ExportRunner|Preview|Templates|Planner)$"
+)
 
 _AREA_ORDER = {
     "CONFIGURATION": 0,
@@ -163,8 +170,15 @@ class ChangeStoryBuilder:
             mappings=mappings,
             source_claims=source_claims,
         )
+        visual_map = self._visual_map(
+            analysis=analysis,
+            nodes=nodes,
+            edges=edges,
+            mappings=mappings,
+            quick_view=quick_view,
+        )
         semantic = {
-            "schema_version": "1.1.0",
+            "schema_version": "1.2.0",
             "story_id": f"story:{analysis_digest[:24]}",
             "language": "zh-CN",
             "status": str(analysis["status"]),
@@ -172,11 +186,12 @@ class ChangeStoryBuilder:
             "analysis_digest": analysis_digest,
             "revisions": analysis["revisions"],
             "overview": {
-                "headline_zh": quick_view["summary_zh"],
-                "headline_en": quick_view["summary_en"],
+                "headline_zh": visual_map["headline_zh"],
+                "headline_en": visual_map["headline_en"],
                 "counts": summary,
             },
             "quick_view": quick_view,
+            "visual_map": visual_map,
             "deep_dive": deep_dive,
             "lanes": lanes,
             "changes": changes,
@@ -444,16 +459,16 @@ class ChangeStoryBuilder:
             "CONDITION": 1,
         }.get(str(node.get("kind")), 0)
         label = str(node.get("label", ""))
-        if re.search(r"(?:^|\.)(?:Try|On|Handle|Execute|Create|Resolve|Validate|Load|Save|Read|Write|Refresh|Import|Export|Send|Broadcast|GetRandom)", label):
+        if re.search(r"(?:^|\.)(?:Try|On|Handle|Execute|Create|Resolve|Validate|Verify|Load|Save|Read|Write|Refresh|Import|Export|Send|Broadcast|GetRandom)", label):
             score += 4
         if re.search(r"(?:^|\.)(?:On|Handle|Execute)[A-Z]", label):
             score += 3
         if re.search(r"(?:^|\.)Try[A-Z]", label):
             score += 2
-        if re.search(r"(?:Window|Repository|Validator|Service|Controller|Manager)$", label):
+        if _ROLE_TYPE_PATTERN.search(label):
             score += 6
         if re.search(
-            r"(?:^|\.)(?:OnGUI|OnSceneGUI|OnEditorUpdate|OnEnable|OnDisable|OnProjectChange|OnUndoRedo|Update|LateUpdate|FixedUpdate)\(",
+            r"(?:^|\.)(?:OnGUI|OnSceneGUI|OnEditorUpdate|OnPlayModeStateChanged|OnEnable|OnDisable|OnProjectChange|OnUndoRedo|Update|LateUpdate|FixedUpdate)\(",
             label,
         ):
             score -= 8
@@ -851,10 +866,7 @@ class ChangeStoryBuilder:
             key=lambda node: (
                 0 if (
                     node.get("kind") == "TYPE"
-                    and re.search(
-                        r"(?:Window|Repository|Validator|Service|Controller|Manager)$",
-                        str(node.get("label", "")),
-                    )
+                    and _ROLE_TYPE_PATTERN.search(str(node.get("label", "")))
                 ) else 1,
                 -self._node_score(node), str(node.get("label", "")),
             ),
@@ -940,6 +952,279 @@ class ChangeStoryBuilder:
             "evidence_summary_en": "Every stage, step and decision retains node, relationship or source-location references; the raw analysis remains the final evidence layer.",
         }
         return quick_view, deep_dive
+
+    def _visual_map(
+        self,
+        *,
+        analysis: Mapping[str, object],
+        nodes: Mapping[str, dict],
+        edges: Sequence[dict],
+        mappings: Sequence[dict],
+        quick_view: Mapping[str, object],
+    ) -> dict:
+        """Build a bounded, evidence-only first-screen map.
+
+        The map does not treat a list of changed symbols as a call chain.  It only
+        advertises a verified flow when the analysis contains a changed edge.
+        """
+
+        analysis_digest = _non_empty_string(analysis.get("canonical_digest"), "analysis digest")
+        focus_nodes = [
+            node for node in self._focus_nodes(nodes, edges)
+            if node.get("change") != "UNCHANGED_CONTEXT" and self._area(node) != "GENERATED"
+        ]
+        old_nodes = [node for node in focus_nodes if node.get("revision") == "OLD"]
+        new_nodes = [node for node in focus_nodes if node.get("revision") == "NEW"]
+        areas = {self._area(node) for node in focus_nodes}
+
+        if areas and areas <= {"TEST"}:
+            shape = "TEST_ONLY"
+        elif areas and areas <= {"CONFIGURATION", "PROTOCOL"}:
+            shape = "CONFIG_PROTOCOL"
+        elif new_nodes and not old_nodes:
+            shape = "ADDED"
+        elif old_nodes and not new_nodes:
+            shape = "REMOVED"
+        elif old_nodes and new_nodes:
+            shape = "MODIFIED"
+        else:
+            shape = "PARALLEL"
+
+        focus_ids = {str(node["node_id"]) for node in focus_nodes}
+        changed_edges = [
+            edge for edge in edges
+            if edge.get("change") != "UNCHANGED_CONTEXT"
+            and edge.get("source_node_id") in focus_ids
+            and edge.get("target_node_id") in focus_ids
+        ]
+        relationship_mode = "VERIFIED_FLOW" if changed_edges else "PARALLEL_FACTS"
+
+        def picked(values: Sequence[dict], limit: int = _MAX_MAP_ITEMS) -> list[dict]:
+            result: list[dict] = []
+            seen: set[str] = set()
+            ordered = sorted(values, key=lambda node: (
+                0 if node.get("kind") == "TYPE" and _ROLE_TYPE_PATTERN.search(str(node.get("label", ""))) else 1,
+                -self._node_score(node),
+                str(node.get("label", "")),
+                str(node.get("node_id", "")),
+            ))
+            for node in ordered:
+                if node.get("kind") in {"CONDITION", "RETURN"} and result:
+                    continue
+                label = self._compact_label(node.get("label", ""))
+                if label in seen:
+                    continue
+                seen.add(label)
+                result.append(node)
+                if len(result) == limit:
+                    break
+            return result
+
+        def node_item(node: Mapping[str, object], role: str) -> dict:
+            node_id = str(node["node_id"])
+            label = self._compact_label(node.get("label", ""))
+            change = str(node["change"])
+            identity = f"{role}:{node_id}"
+            return {
+                "item_id": f"visual:{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:16]}",
+                "role": role,
+                "label_zh": f"{_CHANGE_ZH.get(change, change)} {label}" if role == "CHANGE" else label,
+                "label_en": f"{_CHANGE_EN.get(change, change)} {label}" if role == "CHANGE" else label,
+                "change": change,
+                "confidence": str(node["provenance"]["confidence"]),
+                "evidence_refs": [node_id],
+                "locations": [node["location"]],
+            }
+
+        def context_item(
+            seed: str,
+            role: str,
+            label_zh: str,
+            label_en: str,
+            refs: Sequence[str],
+            locations: Sequence[Mapping[str, object]] = (),
+        ) -> dict:
+            identity = f"{role}:{seed}:{analysis_digest}"
+            return {
+                "item_id": f"visual:{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:16]}",
+                "role": role,
+                "label_zh": label_zh,
+                "label_en": label_en,
+                "change": "CONTEXT",
+                "confidence": "STRUCTURAL",
+                "evidence_refs": list(refs) or [analysis_digest],
+                "locations": list(locations),
+            }
+
+        before = [node_item(node, "BEFORE") for node in picked(old_nodes)]
+        after = [node_item(node, "AFTER") for node in picked(new_nodes)]
+        change_items: list[dict] = []
+        if shape == "MODIFIED":
+            for mapping in sorted(mappings, key=lambda item: str(item["mapping_id"])):
+                old = nodes[mapping["old_node_id"]]
+                new = nodes[mapping["new_node_id"]]
+                if old.get("change") == "UNCHANGED_CONTEXT" and mapping.get("kind") not in {
+                    "RENAMED", "MOVED", "RENAMED_AND_MOVED"
+                }:
+                    continue
+                identity = f"CHANGE:{mapping['mapping_id']}"
+                old_label = self._compact_label(old["label"])
+                new_label = self._compact_label(new["label"])
+                if old_label == new_label and mapping["kind"] not in {
+                    "RENAMED", "MOVED", "RENAMED_AND_MOVED"
+                }:
+                    continue
+                visual_change = (
+                    str(mapping["kind"])
+                    if mapping["kind"] in {"RENAMED", "MOVED", "RENAMED_AND_MOVED"}
+                    else str(old["change"])
+                )
+                change_items.append({
+                    "item_id": f"visual:{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:16]}",
+                    "role": "CHANGE",
+                    "label_zh": f"{old_label} → {new_label}",
+                    "label_en": f"{old_label} → {new_label}",
+                    "change": visual_change,
+                    "confidence": str(mapping["confidence"]),
+                    "evidence_refs": [str(mapping["mapping_id"]), str(old["node_id"]), str(new["node_id"])],
+                    "locations": [old["location"], new["location"]],
+                })
+                if len(change_items) == _MAX_MAP_CHANGES:
+                    break
+            seen_change_labels = {str(item["label_zh"]) for item in change_items}
+            added_candidates = [node for node in new_nodes if node.get("change") == "ADDED"]
+            for node in picked(added_candidates, _MAX_MAP_CHANGES):
+                item = node_item(node, "CHANGE")
+                if item["label_zh"] in seen_change_labels:
+                    continue
+                seen_change_labels.add(item["label_zh"])
+                change_items.append(item)
+                if len(change_items) == _MAX_MAP_CHANGES:
+                    break
+        if not change_items:
+            preferred = new_nodes if new_nodes else old_nodes
+            change_items = [node_item(node, "CHANGE") for node in picked(preferred, _MAX_MAP_CHANGES)]
+        if not change_items:
+            change_items = [context_item(
+                "no-business-focus", "CHANGE", "没有进入快速视图的业务结构变化",
+                "No business structural change entered the quick view", [analysis_digest],
+            )]
+
+        area_zh = "、".join(
+            _AREA_LABELS[area][0] for area in sorted(areas, key=lambda item: _AREA_ORDER[item])
+        ) or "代码结构"
+        area_en = ", ".join(
+            _AREA_LABELS[area][1] for area in sorted(areas, key=lambda item: _AREA_ORDER[item])
+        ) or "code structure"
+        core_refs = [ref for item in change_items for ref in item["evidence_refs"]]
+        core_locations = [location for item in change_items for location in item["locations"]]
+
+        if shape == "TEST_ONLY":
+            headline_zh = "本次修改集中在测试保障；现有证据未显示业务运行代码的 C# 结构变化。"
+            headline_en = "The change is confined to test coverage; current evidence shows no C# structural change in runtime business code."
+            before = [context_item(
+                "test-before", "BEFORE", "业务运行代码未进入本次 C# 变化范围",
+                "Runtime business code is outside this C# change set", [analysis_digest],
+            )]
+            after = [context_item(
+                "test-after", "AFTER", f"形成 {len(change_items)} 个代表性测试变化点",
+                f"Produces {len(change_items)} representative test change points", core_refs, core_locations,
+            )]
+            labels = ("原有业务", "测试变化", "现在得到", "Existing behavior", "Test changes", "Result")
+        elif shape == "ADDED":
+            headline_zh = f"本次是在原版本没有对应结构的位置新增 {quick_view['primary_topic']}。"
+            headline_en = f"This change adds {quick_view['primary_topic']} where no corresponding structure existed in the old revision."
+            before = [context_item(
+                "added-before", "BEFORE", "旧版本未发现对应结构信号",
+                "No corresponding structural signal was found in the old revision", [analysis_digest],
+            )]
+            after = [context_item(
+                "added-after", "AFTER", f"新增结构进入 {area_zh}",
+                f"New structure is present in {area_en}", core_refs, core_locations,
+            )]
+            labels = ("原来没有", "新增核心", "现在具备", "Previously absent", "Added core", "Now present")
+        elif shape == "REMOVED":
+            headline_zh = f"本次从 {area_zh} 中移除了 {quick_view['primary_topic']}。"
+            headline_en = f"This change removes {quick_view['primary_topic']} from {area_en}."
+            after = [context_item(
+                "removed-after", "AFTER", "新版本未保留对应结构信号",
+                "The corresponding structural signal is absent from the new revision", core_refs, core_locations,
+            )]
+            labels = ("原有结构", "移除核心", "现在结果", "Previous structure", "Removed core", "Result")
+        elif shape == "CONFIG_PROTOCOL":
+            headline_zh = f"本次修改集中在 {area_zh}，需要结合真实导出数据确认最终消费效果。"
+            headline_en = f"The change is concentrated in {area_en}; real exported data is still needed to verify consumption behavior."
+            if not before:
+                before = [context_item(
+                    "data-before", "BEFORE", "旧版本未发现对应配置或协议结构",
+                    "No corresponding configuration or protocol structure was found in the old revision", [analysis_digest],
+                )]
+            if not after:
+                after = [context_item(
+                    "data-after", "AFTER", "新版本未保留对应配置或协议结构",
+                    "The corresponding configuration or protocol structure is absent from the new revision", core_refs, core_locations,
+                )]
+            labels = ("原数据结构", "配置/协议变化", "新数据结构", "Old data shape", "Data change", "New data shape")
+        elif shape == "MODIFIED":
+            if any(node.get("change") == "ADDED" for node in new_nodes):
+                headline_zh = f"本次调整了 {area_zh} 的既有实现，并加入 {quick_view['primary_topic']} 等新结构。"
+                headline_en = f"This change adjusts the existing {area_en} implementation and adds new structures including {quick_view['primary_topic']}."
+            else:
+                headline_zh = f"本次围绕 {quick_view['primary_topic']} 调整了 {area_zh} 的既有实现结构。"
+                headline_en = f"This change adjusts the existing {area_en} implementation around {quick_view['primary_topic']}."
+            labels = ("原来怎样", "核心调整", "现在怎样", "Before", "Core change", "After")
+        else:
+            headline_zh = "本次变化由若干并列代码事实组成，当前证据不足以把它们串成一条调用链。"
+            headline_en = "The change contains parallel code facts; current evidence is insufficient to present them as one call chain."
+            if not before:
+                before = [context_item(
+                    "parallel-before", "BEFORE", "没有可对照的旧版本聚焦对象",
+                    "No focused old-revision object is available for comparison", [analysis_digest],
+                )]
+            if not after:
+                after = [context_item(
+                    "parallel-after", "AFTER", "变化结果保留在并列代码事实中",
+                    "The result remains a set of parallel code facts", core_refs, core_locations,
+                )]
+            labels = ("原有证据", "并列变化", "当前结果", "Old evidence", "Parallel facts", "Current result")
+
+        if relationship_mode == "VERIFIED_FLOW":
+            relation_zh = "三列表示版本变化，不表示列中对象相互调用；分析另发现结构关系证据，可在详细页查看。"
+            relation_en = "The columns show revision change, not calls between their items; separate structural relationship evidence is available in the detailed view."
+        else:
+            relation_zh = "中间项目是并列变化，不表示它们按显示顺序相互调用。"
+            relation_en = "The middle items are parallel changes and do not imply calls in display order."
+
+        risk_cards = quick_view.get("risk_cards", [])
+        risk_zh = (
+            str(risk_cards[0]["description_zh"])
+            if isinstance(risk_cards, Sequence) and risk_cards else "没有自动提取到需要突出显示的风险。"
+        )
+        risk_en = (
+            str(risk_cards[0]["description_en"])
+            if isinstance(risk_cards, Sequence) and risk_cards else "No priority risk was automatically extracted."
+        )
+        return {
+            "change_shape": shape,
+            "relationship_mode": relationship_mode,
+            "headline_zh": headline_zh,
+            "headline_en": headline_en,
+            "before_label_zh": labels[0],
+            "change_label_zh": labels[1],
+            "after_label_zh": labels[2],
+            "before_label_en": labels[3],
+            "change_label_en": labels[4],
+            "after_label_en": labels[5],
+            "before": before[:_MAX_MAP_ITEMS],
+            "changes": change_items[:_MAX_MAP_CHANGES],
+            "after": after[:_MAX_MAP_ITEMS],
+            "relationship_note_zh": relation_zh,
+            "relationship_note_en": relation_en,
+            "impact_zh": str(quick_view["impact_summary_zh"]),
+            "impact_en": str(quick_view["impact_summary_en"]),
+            "risk_zh": risk_zh,
+            "risk_en": risk_en,
+        }
 
     def _code_fact_claims(
         self, diff: Mapping[str, object], nodes: Mapping[str, dict], edges: Sequence[dict], mappings: Sequence[dict]
@@ -1067,7 +1352,7 @@ class HtmlChangeStoryRenderer:
     """Render a self-contained, script-free two-level Chinese-first report."""
 
     def render(self, story: Mapping[str, object], *, repository_root: str | os.PathLike[str] | None = None) -> str:
-        if story.get("schema_version") != "1.1.0" or story.get("language") != "zh-CN":
+        if story.get("schema_version") != "1.2.0" or story.get("language") != "zh-CN":
             raise ValueError("unsupported Change Story")
         repo = Path(repository_root).resolve() if repository_root is not None else None
         revisions = story.get("revisions")
@@ -1081,6 +1366,7 @@ class HtmlChangeStoryRenderer:
         overview = story["overview"]
         counts = overview["counts"]
         quick = story["quick_view"]
+        visual = story["visual_map"]
         deep = story["deep_dive"]
         claims = story["claims"]
         facts = [item for item in claims if item["layer"] == "CODE_FACT"]
@@ -1118,6 +1404,20 @@ class HtmlChangeStoryRenderer:
                 f'{evidence_details(item["evidence_refs"], item["locations"])}</div></article>'
                 for item in quick["change_cards"]
             )
+
+        def visual_items(items: Sequence[Mapping[str, object]]) -> str:
+            return "".join(
+                f'<article class="map-item change-{esc(str(item["change"]).lower())}">'
+                f'<strong>{esc(item["label_zh"])}</strong>'
+                f'<small>{esc(item["confidence"])}</small>'
+                f'{evidence_details(item["evidence_refs"], item["locations"])}</article>'
+                for item in items
+            )
+
+        def map_connector() -> str:
+            if visual["relationship_mode"] == "VERIFIED_FLOW":
+                return '<div class="map-connector transition" aria-label="版本变化，不表示调用">⇒</div>'
+            return '<div class="map-connector parallel" aria-label="并列事实，不表示调用">•••</div>'
 
         def flow_steps(items: Sequence[Mapping[str, object]], empty: str) -> str:
             if not items:
@@ -1250,6 +1550,7 @@ h1{{margin:8px 0;font-size:30px}} h2{{margin:30px 0 13px}} h3{{margin:0 0 7px}} 
 .tab-nav label{{flex:1;text-align:center;padding:12px;border-radius:10px;cursor:pointer;font-weight:700;color:var(--muted)}} #tab-quick:checked~.tab-nav label[for=tab-quick],#tab-deep:checked~.tab-nav label[for=tab-deep]{{background:white;color:var(--blue);box-shadow:0 4px 14px #26395c18}}
 .tab-panel{{display:none}} #tab-quick:checked~.quick-panel,#tab-deep:checked~.deep-panel{{display:block}} .hero-summary{{font-size:21px;font-weight:700;margin:24px 0 10px}} .analogy{{padding:16px 18px;border:1px dashed #8aa8ef;background:#f6f9ff;border-radius:13px;color:#25447f}}
 .cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}} .change-card{{display:flex;gap:11px;background:white;border:1px solid var(--line);border-top:4px solid var(--blue);border-radius:14px;padding:16px;box-shadow:var(--shadow);min-width:0}} .change-card>div:last-child{{min-width:0}} .card-icon{{font-size:25px}} .change-card p{{font-size:14px;overflow-wrap:anywhere}} .evidence summary{{cursor:pointer;color:var(--blue);font-size:12px}}
+.change-map{{display:grid;grid-template-columns:minmax(0,1fr) 44px minmax(0,1.1fr) 44px minmax(0,1fr);gap:10px;align-items:stretch;margin-top:14px}} .map-column{{background:white;border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow)}} .map-column h3{{display:flex;justify-content:space-between;gap:8px}} .map-column h3 small{{font-weight:500}} .map-before{{border-top:5px solid #8a95a8}} .map-change{{border-top:5px solid var(--amber);background:#fffdf8}} .map-after{{border-top:5px solid var(--blue)}} .map-item{{padding:11px 12px;margin-top:9px;border:1px solid var(--line);border-left:4px solid #94a3b8;border-radius:10px;background:#fafcff;overflow-wrap:anywhere}} .map-item strong,.map-item small{{display:block}} .map-connector{{display:grid;place-items:center;font-size:28px;font-weight:800;color:var(--blue)}} .map-connector.parallel{{font-size:19px;letter-spacing:2px;color:#98a2b3}} .map-note{{margin:12px 0 0;padding:10px 13px;border-radius:10px;background:#edf3ff;color:#35558d;font-size:13px}} .shape-tag{{display:inline-block;margin-left:8px;padding:2px 9px;border-radius:999px;background:#e8efff;color:var(--blue);font-size:11px;vertical-align:middle}} .quick-support{{margin-top:18px;padding:13px 15px;background:#eef2f7;border-radius:12px}} .quick-support>summary{{cursor:pointer;font-weight:700}} .quick-support .analogy{{margin:13px 0}}
 .comparison,.two-columns,.layers,.lanes,.stage-body{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px}} .lane,.panel,.claim,.chain,.stage,.decision,.risk{{background:var(--panel);border:1px solid var(--line);border-radius:14px}} .lane,.panel{{padding:18px}} .lane-old{{border-top:5px solid #8a95a8}} .lane-new{{border-top:5px solid var(--blue)}}
 .flow-step{{display:flex;gap:11px;padding:12px;border:1px solid var(--line);border-left:4px solid #94a3b8;border-radius:10px;background:#fafcff}} .flow-step>div{{min-width:0}} .flow-step strong,.flow-step span,.location{{display:block}} .flow-step span,.location{{color:var(--muted);font-size:12px;overflow-wrap:anywhere}} .step-number,.stage-number{{display:grid!important;place-items:center;flex:0 0 25px;height:25px;border-radius:50%;background:var(--blue-soft);color:var(--blue)!important;font-weight:700}} .flow-arrow{{padding:2px 0 2px 11px;color:#7b8aa5}}
 .risk{{display:flex;gap:12px;padding:14px;margin:10px 0;border-left:5px solid var(--amber)}} .risk>span{{font-size:11px;font-weight:800;color:var(--amber)}} .risk-high{{border-left-color:var(--red)}} .risk-high>span{{color:var(--red)}}
@@ -1257,22 +1558,25 @@ h1{{margin:8px 0;font-size:30px}} h2{{margin:30px 0 13px}} h3{{margin:0 0 7px}} 
 .decision{{display:flex;gap:12px;padding:14px;margin:10px 0;border-left:4px solid var(--amber)}} .decision-mark{{font-size:23px;color:var(--amber)}} .decision small{{display:block}} .technical{{margin-top:24px;padding:16px;background:#eef2f7;border-radius:14px}} .technical>summary{{cursor:pointer;font-weight:800}}
 .metrics{{display:grid;grid-template-columns:repeat(6,minmax(90px,1fr));gap:9px;margin:16px 0}} .metric{{padding:12px;background:white;border:1px solid var(--line);border-radius:10px}} .metric strong{{display:block;font-size:20px}} .layers{{grid-template-columns:repeat(3,minmax(0,1fr))}} .claim{{padding:13px;margin:9px 0;border-left:4px solid var(--blue)}} .claim.source_evidence{{border-left-color:var(--purple)}} .claim.intent_inference{{border-left-color:var(--amber)}} .claim-tag{{font-size:11px;color:var(--muted)}}
 .chain{{padding:12px;margin:10px 0}} .chain-node{{padding:10px 12px;border-radius:9px;background:#f8fafc;border-left:4px solid #94a3b8;overflow-wrap:anywhere}} .chain-node span{{display:block;color:var(--muted);font-size:12px}} .arrow{{padding:6px 18px;color:var(--blue)}} .arrow span:before{{content:"↓  "}} .arrow small{{display:block;margin-left:18px}}
-.change-added{{border-color:var(--green)!important;color:var(--green)}} .change-removed{{border-color:var(--red)!important;color:var(--red)}} .change-updated{{border-color:var(--amber)!important;color:var(--amber)}} .change-moved,.change-renamed,.change-renamed_and_moved{{border-color:var(--blue)!important;color:var(--blue)}}
+.change-added{{border-color:var(--green)!important}} .change-removed{{border-color:var(--red)!important}} .change-updated{{border-color:var(--amber)!important}} .change-moved,.change-renamed,.change-renamed_and_moved{{border-color:var(--blue)!important}} .badge.change-added{{color:var(--green)}} .badge.change-removed{{color:var(--red)}} .badge.change-updated{{color:var(--amber)}} .badge.change-moved,.badge.change-renamed,.badge.change-renamed_and_moved{{color:var(--blue)}}
 table{{width:100%;border-collapse:collapse;background:white;border-radius:12px;overflow:hidden}} th,td{{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}} th{{background:#edf2f8}} code{{display:block;font-size:11px;word-break:break-all;color:#58647a}} .badge{{display:inline-block;border:1px solid currentColor;border-radius:999px;padding:2px 8px;font-size:11px}} .empty{{color:var(--muted)}} footer{{margin:30px 0;color:var(--muted)}}
-@media(max-width:1050px){{.cards{{grid-template-columns:repeat(2,1fr)}}}} @media(max-width:780px){{main{{padding:13px}}.cards,.comparison,.two-columns,.layers,.lanes,.stage-body{{grid-template-columns:1fr}}.metrics{{grid-template-columns:repeat(2,1fr)}}.tab-nav{{position:static}}}}
+@media(max-width:1050px){{.cards{{grid-template-columns:repeat(2,1fr)}}.change-map{{grid-template-columns:1fr}}.map-connector{{min-height:22px;transform:rotate(90deg)}}.map-connector.parallel{{transform:none}}}} @media(max-width:780px){{main{{padding:13px}}.cards,.comparison,.two-columns,.layers,.lanes,.stage-body{{grid-template-columns:1fr}}.metrics{{grid-template-columns:repeat(2,1fr)}}.tab-nav{{position:static}}}}
 </style></head><body><main data-story-digest="{esc(story["canonical_digest"])}">
 <header><span class="status">{status}</span><h1>{esc(story["title"])}</h1>
-<p>{esc(quick["summary_zh"])}</p><p class="en">{esc(quick["summary_en"])}</p>
+<p>{esc(visual["headline_zh"])}</p><p class="en">{esc(visual["headline_en"])}</p>
 {('<div class="partial-note">PARTIAL：当前结论仅覆盖变更 C# 文件，所有关系最高为结构级证据。</div>' if story["status"] == "PARTIAL" else '')}
 <p class="digest">Analysis {esc(story["analysis_digest"])} · Story {esc(story["canonical_digest"])}</p></header>
 <input class="tab-input" type="radio" name="story-tab" id="tab-quick" checked><input class="tab-input" type="radio" name="story-tab" id="tab-deep">
 <nav class="tab-nav"><label for="tab-quick">⚡ 快速理解 <small>30–60 秒</small></label><label for="tab-deep">🧭 详细思路拆解 <small>按证据重建</small></label></nav>
 <section class="tab-panel quick-panel">
-<p class="hero-summary">{esc(quick["summary_zh"])}</p><div class="analogy">{esc(quick["analogy_zh"])}</div>
-<h2>到底改了什么</h2><section class="cards">{quick_cards()}</section>
-<h2>原来怎样 → 现在怎样</h2><section class="comparison"><div class="lane lane-old"><h3>原链路 <small>OLD</small></h3>{flow_steps(quick["old_flow"],"原版本没有进入业务聚焦层的显著步骤。")}</div>
-<div class="lane lane-new"><h3>新链路 <small>NEW</small></h3>{flow_steps(quick["new_flow"],"新版本没有进入业务聚焦层的显著步骤。")}</div></section>
-<section class="two-columns"><div><h2>影响范围</h2><div class="panel"><p>{esc(quick["impact_summary_zh"])}</p></div></div><div><h2>优先关注</h2>{risk_cards()}</div></section>
+<p class="hero-summary">{esc(visual["headline_zh"])}<span class="shape-tag">{esc(visual["change_shape"])}</span></p>
+<h2>一眼看懂</h2><section class="change-map" data-change-shape="{esc(visual["change_shape"])}" data-relationship-mode="{esc(visual["relationship_mode"])}">
+<div class="map-column map-before"><h3>{esc(visual["before_label_zh"])} <small>{esc(visual["before_label_en"])}</small></h3>{visual_items(visual["before"])}</div>
+{map_connector()}<div class="map-column map-change"><h3>{esc(visual["change_label_zh"])} <small>{esc(visual["change_label_en"])}</small></h3>{visual_items(visual["changes"])}</div>
+{map_connector()}<div class="map-column map-after"><h3>{esc(visual["after_label_zh"])} <small>{esc(visual["after_label_en"])}</small></h3>{visual_items(visual["after"])}</div></section>
+<p class="map-note">证据边界：{esc(visual["relationship_note_zh"])}</p>
+<section class="two-columns"><div><h2>影响范围</h2><div class="panel"><p>{esc(visual["impact_zh"])}</p></div></div><div><h2>最需要注意</h2><div class="panel"><p>{esc(visual["risk_zh"])}</p></div></div></section>
+<details class="quick-support"><summary>展开辅助理解与涉及领域</summary><div class="analogy">{esc(quick["analogy_zh"])}</div><section class="cards">{quick_cards()}</section></details>
 </section>
 <section class="tab-panel deep-panel">
 <p class="hero-summary">{esc(deep["strategy_summary_zh"])}</p><div class="method-note">{esc(deep["method_note_zh"])}</div>

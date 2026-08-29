@@ -1,6 +1,6 @@
 ---
 name: aeh-change-lens
-description: Explicitly use AEH Change Lens for a quick or detailed OLD-to-NEW Unity C# modification explanation when the user asks for Change Lens, an AI modification path report, or invokes $aeh-change-lens. Do not invoke implicitly for ordinary code review or editing.
+description: Explicitly use AEH Change Lens for a quick change-shape map or detailed Unity C# modification explanation when the user asks for Change Lens, an AI modification path report, or invokes $aeh-change-lens. Do not invoke implicitly for ordinary code review or editing.
 ---
 
 # AEH Change Lens
@@ -35,6 +35,6 @@ Never claim access to hidden model reasoning. Keep these layers distinct:
 
 ## Handoff
 
-Read the focused `change-story.json` before the full analysis JSON. In quick mode, return the clickable report plus its one-sentence summary, OLD/NEW focus flow, impact scope, and priority risks. In detailed mode, additionally explain the staged implementation structure and decision points, keeping code facts, source evidence, and inference distinct.
+Read the focused `change-story.json` before the full analysis JSON. In quick mode, lead with `visual_map`: state its change shape, headline, bounded Before / Core change / After items, impact, first material risk, and whether relationships are verified flow or parallel facts. Never turn `PARALLEL_FACTS` into a narrated call sequence. In detailed mode, additionally explain the staged implementation structure and decision points, keeping code facts, source evidence, and inference distinct.
 
 State `PARTIAL` prominently when present. Do not dump raw node/edge counts unless asked for technical evidence. Open the report in a visible browser only when the user asks to open it.
