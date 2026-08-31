@@ -197,6 +197,8 @@ class RevisionChangeAnalyzerTests(unittest.TestCase):
         self.assertIn("原链路", rendered)
         self.assertIn("新链路", rendered)
         self.assertIn("拒绝非正数增量", rendered)
+        self.assertIn(repository.source.resolve().as_uri(), rendered)
+        self.assertNotIn((self.root / "Unity/Unity/Assets/Game/Counter.cs").as_uri(), rendered)
         self.assertNotIn("<script", rendered.lower())
 
     def test_two_immutable_git_revisions_are_analyzed_without_checkout(self) -> None:
@@ -285,7 +287,7 @@ class RevisionChangeAnalyzerTests(unittest.TestCase):
             for item in analysis["diff"]["mappings"]
         ))
         self.assertIn("预检 OLD/NEW revision 编译基线", progress.getvalue())
-        self.assertIn("生成 Change Story HTML", progress.getvalue())
+        self.assertIn("生成三档阅读 Change Story", progress.getvalue())
         rendered = report_path.read_text(encoding="utf-8")
         self.assertIn("PARTIAL", rendered)
         self.assertIn("PARTIAL 结构分析显示", rendered)

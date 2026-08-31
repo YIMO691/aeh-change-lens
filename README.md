@@ -10,9 +10,8 @@
 AEH Change Lens 是面向 Unity/C# 游戏业务代码的只读修改解释工具。它把一次代码修改整理为：
 
 ```text
-原逻辑链路 → 结构化变化 → 新逻辑链路
-                  │
-                  └─ 代码事实、来源证据、意图推断、影响与未知项
+完整分析 → 日常简报（默认：发生了什么、与你何关、先验证什么）
+         └→ 场景镜头（理解改法）→ OLD/NEW 对照（按需）→ 技术证据
 ```
 
 它不会读取或还原模型隐藏思维链，只展示能够被 Git、Roslyn、用户提供的任务说明和明确标注的推断所支持的结论。
@@ -25,7 +24,8 @@ AEH Change Lens 是面向 Unity/C# 游戏业务代码的只读修改解释工具
 - 对比 Git `OLD` revision 与 `NEW` revision/工作树，全程不 checkout。
 - 使用 Roslyn 提取调用、分支、异常、状态读写、生命周期、协程、异步、事件和常见 Unity 关系。
 - 输出确定性的新增、删除、修改、移动和上下文关系。
-- 生成中文优先、无脚本、完全离线的 Change Story HTML。
+- 生成中文优先、无脚本、完全离线的 Change Story HTML：默认按问题展示一个场景，按需展开 OLD/NEW 对照与详细证据。
+- 将生成代码、测试代码和语法碎片从首页降权，按配置、服务端、协议、客户端和测试组织业务变化。
 - 严格分开 `CODE_FACT`、`SOURCE_EVIDENCE` 和 `INTENT_INFERENCE`。
 - 对缺失、过期、越界或无法证明的输入 fail closed 或显式降级为 `PARTIAL`。
 - 提供显式触发的 `$aeh-change-lens` Codex Skill，隐藏日常 CLI 参数。
@@ -73,6 +73,7 @@ change-lens explain D:\GameRepo Unity `
   --target WORKTREE `
   --request-id CHANGE-001 `
   --analysis-output change-analysis.json `
+  --story-output change-story.json `
   --output change-story.html `
   --pretty
 ```
@@ -86,6 +87,7 @@ change-lens explain D:\GameRepo Unity `
   --target WORKTREE `
   --request-id CHANGE-001 `
   --analysis-output change-analysis.json `
+  --story-output change-story.json `
   --output change-story.html `
   --allow-syntax-partial `
   --progress `
@@ -118,12 +120,13 @@ change-lens export-compile-manifest D:\GameRepo Unity `
 
 Change Story 报告包含：
 
-1. 修改摘要与变化计数；
-2. 代码事实、来源证据和意图推断；
-3. 原链路与新链路；
-4. 符号变化与代码位置；
-5. 状态、事件、类型和动态目标影响；
-6. `PARTIAL` 原因及其他限制。
+1. **只看结论**：用一句日常语言说明发生了什么，给出最多 3 个记忆点和 3 条验证建议；
+2. **理解改法**：按读者问题切换场景，每个场景最多 7 个 OLD/NEW 关键对象；
+3. **版本对照**：Change Map Lite 按需展示“原来—核心变化—现在”、影响与首要风险；
+4. **核对证据**：按业务层组织实现阶段、决策点、事实/来源/推断、原始链路和限制；
+5. 可选 `change-story.json`，供 Codex 无需遍历完整 analysis 即可读取聚焦结果。
+
+场景会按 `ADDED`、`REMOVED`、`MODIFIED` 自动选择构图：纯新增或移除场景使用单侧能力画布，不再浪费半屏显示空栏；存在明确关系时，才把关系画成逐条可核对的路径卡。Change Map Lite 仍只在分析结果包含变化关系时显示流程箭头。没有关系证据时，它把方法或类型显示为并列事实，并明确说明显示顺序不代表调用顺序。
 
 HTML 是 UTF-8 单文件，不包含 JavaScript、CDN、远程字体或遥测。
 

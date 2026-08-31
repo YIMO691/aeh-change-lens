@@ -257,3 +257,156 @@ This fallback improves immediate comprehension when historical manifests do
 not exist; it does not retroactively create revision-bound semantic evidence.
 Future strict analysis still requires compile manifests captured for both
 revisions before the change is evaluated.
+
+## 2026-08-31 usability increment: two-level Change Story
+
+This is additional progress evidence only. It does not close `CL-GATE-02` or
+promote business-focus heuristics to compile-confirmed semantics.
+
+- Change Story contract `1.1.0` adds a bounded quick-understanding model and a
+  detailed, evidence-backed implementation breakdown;
+- the default landing view contains one summary, an explicitly labeled mental
+  model, at most five business-area cards, at most eight OLD/NEW focus steps,
+  impact scope and bounded priority risks;
+- detailed mode groups representative objects and relationships by
+  configuration, server, protocol, client, runtime and tests, then exposes new
+  decision/exit points before the complete technical evidence;
+- generated code, tests, unchanged context and syntax fragments remain in the
+  full evidence but cannot displace the primary business flow;
+- `--story-output` writes the focused contract for Codex, and the explicit Skill
+  now reads it before the full analysis JSON.
+
+The complete local suite passed 95 tests with 4 platform-dependent skips. The
+.NET Worker built with 0 warnings and 0 errors, the updated Skill passed its
+validator, and the final HTML remained script-free with no remote resources.
+
+A read-only Ares2 ET6 pilot bound 20 changed C# paths and produced a `PARTIAL`
+two-level story outside the target repository. The quick layer reduced the
+current gameplay change to five area cards, four OLD focus steps and eight NEW
+focus steps. Target Git-status hashes were identical before and after
+(`74267bae547e935dccd81a0ccbe2b75befc1cf850eeb6453f584ea2a564e9f23`).
+The report remains structurally honest: missing compile context is prominent,
+and the focused path is not described as a complete runtime call stack.
+
+A follow-up pilot against six newly added Unity Editor C# paths verified that
+Editor lifecycle callbacks no longer displace the Window, Excel Repository and
+Validator responsibilities in the quick summary. Its target-status hash also
+remained identical before and after analysis
+(`c462d9256d2c29da83ef0780673cafa912944d00aac30e3dc04c5af8886b54a3`).
+
+## 2026-08-29 usability increment: Change Map Lite
+
+This is user-comprehension evidence only. It does not close `CL-GATE-02`, turn
+structural reachability into runtime impact, or promote presentation heuristics
+to analyzer truth.
+
+- Change Story contract `1.2.0` adds a bounded `visual_map` with explicit
+  `MODIFIED`, `ADDED`, `REMOVED`, `TEST_ONLY`, `CONFIG_PROTOCOL` and `PARALLEL`
+  shapes;
+- the quick view presents at most three Before, Core change and After items,
+  followed by impact and the first material risk;
+- the three columns are always revision comparison, never an implied call
+  sequence; changed edge evidence is disclosed separately and parallel facts
+  remain explicitly unordered;
+- added, removed and test-only changes no longer produce empty OLD/NEW flow
+  boxes, while the detailed evidence view remains available unchanged;
+- the Codex Skill now reads `visual_map` first and is forbidden from narrating
+  `PARALLEL_FACTS` as a call chain.
+
+The complete local suite passed 99 tests with 4 platform-dependent skips. The
+.NET Worker built with 0 warnings and 0 errors, both repository and installed
+Skill copies passed validation, and the final HTML remained script-free with no
+remote resources.
+
+Two read-only Ares2 pilots exercised different presentation shapes. A 13-file
+Unity Editor/test snapshot produced a `MODIFIED` map centered on Auto Fixer,
+Change Tracker and Export Runner roles. The worktree then changed independently;
+the final current snapshot contained one changed C# test file and produced a
+`TEST_ONLY` map centered on repository-file, exported-configuration and protocol
+field validation. The final target fingerprint was identical before and after
+analysis (`0a0012afe32bd096bc8fd1cc3b89d52ec814621e43da858a5bf9afeadd14efa7`).
+
+## 2026-08-30 usability increment: Scenario Lens
+
+This is reader-comprehension progress evidence only. It does not close
+`CL-GATE-02`, infer runtime order from display order, or promote business labels
+to compiler-confirmed facts.
+
+- Change Story contract `1.3.0` adds a question-first `scenario_lens` with at
+  most five scenarios, seven OLD/NEW focus objects and six exact relationships
+  per scenario;
+- the default view answers one primary reader question using business labels;
+  technical names, the full Change Map Lite comparison and area cards are now
+  on-demand evidence;
+- scenario ranking favors genuinely added or removed methods and types over the
+  volume of ordinary `UPDATED` nodes in a large file, preventing line-shift
+  noise from selecting the primary story;
+- duplicate business actions are collapsed to the highest-connected
+  representative object, while the complete symbol and relationship evidence
+  remains available;
+- detailed stages and decision points are closed by default, and the Codex
+  Skill explains only the primary or explicitly selected scenario.
+
+The complete local suite passed 100 tests with 4 platform-dependent skips, and
+both repository and installed Skill copies passed validation. A read-only pilot
+against Ares2 commit `4b56a7633` generated a `PARTIAL` report outside the target
+repository. It selected “Guidance and readiness” as the primary scenario and
+offered bounded load/save/export, preview, authoring and validation views. The
+rendered first screen was inspected at 1440×1800; the OLD/NEW map and detailed
+stages remained collapsed, and repeated readiness methods no longer appeared as
+separate business actions.
+
+## 2026-08-30 usability increment: adaptive visual composition
+
+This is presentation and reader-comprehension evidence only. It does not close
+`CL-GATE-02`, convert structural evidence into runtime causality, or copy a
+third-party renderer into the product.
+
+- Change Story contract `1.4.0` adds one to three bounded memory points and a
+  scenario-local `change_shape`;
+- `ADDED` and `REMOVED` scenarios use an asymmetric full-width capability
+  canvas instead of reserving an empty OLD or NEW half, while `MODIFIED`
+  scenarios retain a direct two-column comparison;
+- only `VERIFIED_FLOW` relationships render as individually inspectable path
+  cards; `PARALLEL_FACTS` remains directionless and carries no invented arrows;
+- the Chinese-first visual system now uses functional status colors, a calmer
+  reading order and progressive disclosure while remaining one script-free,
+  dependency-free offline HTML file;
+- the explicit Codex Skill now leads with `scenario_lens.takeaways_zh`, respects
+  scenario shape, and still keeps full technical evidence on demand.
+
+The complete local suite passed 100 tests with 4 platform-dependent skips. The
+.NET Worker built with 0 warnings and 0 errors, `git diff --check` passed, and
+both repository and installed Skill copies passed validation. The immutable
+Ares2 monster-editor pilot remained `PARTIAL`, selected an `ADDED` guidance and
+readiness scene, exposed three memory points and two exact relationship paths,
+and was visually inspected at 1440×1800. No target-project file was modified by
+the render-only regression.
+
+## 2026-08-31 usability increment: Human Daily Brief
+
+This is reader-workflow and presentation evidence only. It does not close
+`CL-GATE-02`, turn verification suggestions into analyzer facts, or claim
+runtime behavior that was not observed.
+
+- Change Story contract `1.5.0` adds an evidence-linked `daily_brief` with one
+  plain-language change sentence, work impact and two or three bounded checks;
+- the report now exposes three human reading depths: Daily conclusion,
+  Scenario understanding and Technical evidence;
+- verification checks are visually and contractually labeled as suggestions,
+  carry evidence references and remain distinct from code facts;
+- the default desktop first screen contains the change sentence and all three
+  memory points at 1440×900, while the narrow layout stacks the same content
+  without shrinking labels;
+- the explicit Codex Skill now answers from `daily_brief` first and opens
+  Scenario Lens only when the user asks how the change works.
+
+The immutable Ares2 monster-editor pilot remained `PARTIAL`. Its Daily Brief
+described the added guidance/readiness scene, retained three bounded memory
+points, suggested one real editor interaction, one verified-path review and one
+Unity compile/runtime check, and preserved the deeper scenario and evidence
+views without changing the target repository.
+
+The complete local suite passed 100 tests with 4 platform-dependent skips. The
+.NET Worker built with 0 warnings and 0 errors, `git diff --check` passed, and
+the installed explicit Skill passed validation.

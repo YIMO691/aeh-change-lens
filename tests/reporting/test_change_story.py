@@ -142,6 +142,36 @@ def analysis() -> dict:
     }
 
 
+def test_only_analysis() -> dict:
+    payload = copy.deepcopy(analysis())
+    nodes = []
+    for index, label in enumerate((
+        "Program.ReadRepoFile(params string[])",
+        "Program.VerifyActualExportedConfiguration()",
+        "Program.VerifyProtocolFieldNumbers()",
+    )):
+        node = _node("NEW", f"test-{index}", "METHOD", label, 100 + index * 20, "ADDED")
+        node["location"]["path"] = "Tests/MonsterCombo/Program.cs"
+        nodes.append(node)
+    payload["diff"]["nodes"] = nodes
+    payload["diff"]["edges"] = []
+    payload["diff"]["mappings"] = []
+    payload["diff"]["summary"] = {
+        "old_nodes": 0,
+        "new_nodes": 3,
+        "mapped_nodes": 0,
+        "added_nodes": 3,
+        "removed_nodes": 0,
+        "updated_node_pairs": 0,
+        "moved_node_pairs": 0,
+        "added_edges": 0,
+        "removed_edges": 0,
+        "unchanged_edge_pairs": 0,
+    }
+    payload["canonical_digest"] = "8" * 64
+    return payload
+
+
 class ChangeStoryTests(unittest.TestCase):
     def test_story_is_deterministic_schema_valid_and_separates_claim_layers(self) -> None:
         evidence = {
@@ -164,12 +194,40 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertTrue(first["lanes"]["new"]["chains"])
         self.assertTrue(any(item["kind"] == "RENAMED" for item in first["changes"]))
         self.assertTrue(any(item["kind"] == "STATE" for item in first["impacts"]))
+        self.assertLessEqual(len(first["quick_view"]["change_cards"]), 5)
+        self.assertLessEqual(len(first["quick_view"]["old_flow"]), 8)
+        self.assertLessEqual(len(first["quick_view"]["new_flow"]), 8)
+        self.assertTrue(first["quick_view"]["old_flow"])
+        self.assertTrue(first["quick_view"]["new_flow"])
+        self.assertEqual("1.5.0", first["schema_version"])
+        self.assertEqual("MODIFIED", first["visual_map"]["change_shape"])
+        self.assertEqual("VERIFIED_FLOW", first["visual_map"]["relationship_mode"])
+        self.assertLessEqual(len(first["visual_map"]["changes"]), 3)
+        self.assertLessEqual(len(first["visual_map"]["before"]), 3)
+        self.assertLessEqual(len(first["visual_map"]["after"]), 3)
+        self.assertTrue(first["deep_dive"]["stages"])
+        self.assertTrue(first["scenario_lens"]["scenarios"])
+        self.assertLessEqual(len(first["scenario_lens"]["scenarios"]), 5)
+        self.assertLessEqual(len(first["scenario_lens"]["takeaways_zh"]), 3)
+        self.assertEqual(
+            len(first["scenario_lens"]["takeaways_zh"]),
+            len(first["scenario_lens"]["takeaways_en"]),
+        )
+        self.assertIn("来源证据", first["deep_dive"]["method_note_zh"])
+        self.assertEqual(
+            first["scenario_lens"]["primary_scenario_id"],
+            first["daily_brief"]["primary_scenario_id"],
+        )
+        self.assertGreaterEqual(len(first["daily_brief"]["checks"]), 2)
+        self.assertLessEqual(len(first["daily_brief"]["checks"]), 3)
+        self.assertTrue(all(item["evidence_refs"] for item in first["daily_brief"]["checks"]))
 
     def test_absent_source_evidence_is_disclosed_not_invented(self) -> None:
         story = ChangeStoryBuilder().build(analysis())
 
         self.assertFalse(any(item["layer"] == "SOURCE_EVIDENCE" for item in story["claims"]))
         self.assertTrue(any("未提供用户需求" in item for item in story["limitations"]))
+        self.assertIn("不是隐藏思维链", story["deep_dive"]["method_note_zh"])
         self.assertTrue(all(
             "可能" in item["statement_zh"]
             for item in story["claims"] if item["layer"] == "INTENT_INFERENCE"
@@ -183,9 +241,190 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertIn("新链路", rendered)
         self.assertIn("CODE_FACT", rendered)
         self.assertIn("INTENT_INFERENCE", rendered)
+        self.assertIn("只看结论", rendered)
+        self.assertIn("理解改法", rendered)
+        self.assertIn("核对证据", rendered)
+        self.assertIn('id="tab-daily" checked', rendered)
+        self.assertIn("我今天应该先看什么", rendered)
+        self.assertIn("建议先验证", rendered)
+        self.assertIn("这是检查建议，不是代码事实", rendered)
+        self.assertIn("先记住这三点", rendered)
+        self.assertIn('class="takeaways"', rendered)
+        self.assertIn("主场景 · MODIFIED", rendered)
+        self.assertIn("选择你要理解的问题", rendered)
+        self.assertIn("scenario-view-0", rendered)
+        self.assertIn("展开完整 OLD / NEW 版本对照", rendered)
+        self.assertNotIn('<details class="stage" open>', rendered)
+        self.assertIn('data-change-shape="MODIFIED"', rendered)
+        self.assertIn('data-scenario-shape="MODIFIED"', rendered)
+        self.assertIn('aria-label="版本变化，不表示调用"', rendered)
         self.assertIn("奖励 &lt;script&gt;alert(1)&lt;/script&gt;", rendered)
         self.assertNotIn("<script", rendered.lower())
         self.assertNotIn("https://", rendered)
+
+    def test_test_only_change_uses_parallel_checks_instead_of_empty_old_new_lanes(self) -> None:
+        story = ChangeStoryBuilder().build(test_only_analysis())
+        rendered = HtmlChangeStoryRenderer().render(story)
+        visual = story["visual_map"]
+
+        validate("change-story.schema.json", story)
+        self.assertEqual("TEST_ONLY", visual["change_shape"])
+        self.assertEqual("PARALLEL_FACTS", visual["relationship_mode"])
+        self.assertEqual(3, len(visual["changes"]))
+        self.assertIn("测试保障", visual["headline_zh"])
+        self.assertIn("不表示它们按显示顺序相互调用", visual["relationship_note_zh"])
+        self.assertIn('aria-label="并列事实，不表示调用"', rendered)
+        self.assertNotIn('aria-label="版本变化，不表示调用"', rendered)
+        self.assertNotIn("原版本没有进入业务聚焦层的显著步骤", rendered)
+
+    def test_new_editor_tool_uses_added_shape_with_explicit_absence_context(self) -> None:
+        payload = test_only_analysis()
+        for node in payload["diff"]["nodes"]:
+            node["location"]["path"] = "Unity/Assets/Editor/Combo/Tool.cs"
+        story = ChangeStoryBuilder().build(payload)
+        rendered = HtmlChangeStoryRenderer().render(story)
+
+        self.assertEqual("ADDED", story["visual_map"]["change_shape"])
+        self.assertTrue(all(
+            scenario["change_shape"] == "ADDED"
+            for scenario in story["scenario_lens"]["scenarios"]
+        ))
+        self.assertIn("旧版本未发现对应结构信号", story["visual_map"]["before"][0]["label_zh"])
+        self.assertIn("Unity 编辑器工具", story["visual_map"]["after"][0]["label_zh"])
+        self.assertIn('data-scenario-shape="ADDED"', rendered)
+        self.assertIn('class="scenario-single"', rendered)
+        self.assertNotIn("旧版本没有进入该场景的聚焦变化证据", rendered)
+
+    def test_removed_and_configuration_changes_use_shape_specific_maps(self) -> None:
+        for role, change, path, expected in (
+            ("OLD", "REMOVED", "Unity/Codes/Model/Feature.cs", "REMOVED"),
+            ("NEW", "ADDED", "Config/MonsterComboRule.cs", "CONFIG_PROTOCOL"),
+        ):
+            with self.subTest(expected=expected):
+                payload = copy.deepcopy(analysis())
+                node = _node(role, expected.lower(), "TYPE", "Game.MonsterComboRule", 10, change)
+                node["location"]["path"] = path
+                payload["diff"]["nodes"] = [node]
+                payload["diff"]["edges"] = []
+                payload["diff"]["mappings"] = []
+                payload["diff"]["summary"] = {
+                    "old_nodes": 1 if role == "OLD" else 0,
+                    "new_nodes": 1 if role == "NEW" else 0,
+                    "mapped_nodes": 0,
+                    "added_nodes": 1 if change == "ADDED" else 0,
+                    "removed_nodes": 1 if change == "REMOVED" else 0,
+                    "updated_node_pairs": 0,
+                    "moved_node_pairs": 0,
+                    "added_edges": 0,
+                    "removed_edges": 0,
+                    "unchanged_edge_pairs": 0,
+                }
+
+                story = ChangeStoryBuilder().build(payload)
+
+                validate("change-story.schema.json", story)
+                self.assertEqual(expected, story["visual_map"]["change_shape"])
+
+    def test_empty_business_focus_still_produces_a_schema_valid_truthful_map(self) -> None:
+        payload = copy.deepcopy(analysis())
+        payload["diff"]["nodes"] = []
+        payload["diff"]["edges"] = []
+        payload["diff"]["mappings"] = []
+        payload["diff"]["summary"] = {key: 0 for key in payload["diff"]["summary"]}
+
+        story = ChangeStoryBuilder().build(payload)
+
+        validate("change-story.schema.json", story)
+        self.assertEqual("PARALLEL", story["visual_map"]["change_shape"])
+        self.assertIn("没有进入快速视图", story["visual_map"]["changes"][0]["label_zh"])
+
+    def test_generated_noise_stays_in_technical_evidence_not_quick_view(self) -> None:
+        payload = copy.deepcopy(analysis())
+        for index in range(30):
+            generated = _node(
+                "NEW", f"generated-{index:02d}", "TYPE", f"Generated.Payload{index}",
+                100 + index, "ADDED",
+            )
+            generated["location"]["path"] = "Server/Model/Generate/Payloads.cs"
+            payload["diff"]["nodes"].append(generated)
+        payload["diff"]["summary"]["new_nodes"] += 30
+        payload["diff"]["summary"]["added_nodes"] += 30
+
+        story = ChangeStoryBuilder().build(payload)
+
+        self.assertNotIn("GENERATED", {item["area"] for item in story["quick_view"]["change_cards"]})
+        self.assertFalse(any(
+            "Generated.Payload" in item["label"]
+            for item in story["quick_view"]["new_flow"]
+        ))
+        self.assertTrue(any("Generated.Payload" in item["subject_zh"] for item in story["changes"]))
+
+    def test_unity_editor_tooling_prioritizes_roles_over_lifecycle_noise(self) -> None:
+        payload = copy.deepcopy(analysis())
+        additions = (
+            ("editor-window", "TYPE", "ET.EditorTools.ComboEditorWindow"),
+            ("editor-gui", "METHOD", "ET.EditorTools.ComboEditorWindow.OnGUI()"),
+            ("editor-repository", "TYPE", "ET.EditorTools.ComboExcelRepository"),
+            ("editor-load", "METHOD", "ET.EditorTools.ComboExcelRepository.Load(string)"),
+            ("editor-validator", "TYPE", "ET.EditorTools.ComboValidator"),
+            ("editor-validate", "METHOD", "ET.EditorTools.ComboValidator.Validate()"),
+        )
+        for index, (suffix, kind, label) in enumerate(additions):
+            node = _node("NEW", suffix, kind, label, 100 + index, "ADDED")
+            node["location"]["path"] = "Unity/Assets/Editor/Combo/Tool.cs"
+            payload["diff"]["nodes"].append(node)
+        payload["diff"]["summary"]["new_nodes"] += len(additions)
+        payload["diff"]["summary"]["added_nodes"] += len(additions)
+
+        story = ChangeStoryBuilder().build(payload)
+        editor_card = next(
+            item for item in story["quick_view"]["change_cards"] if item["area"] == "EDITOR"
+        )
+
+        self.assertIn("ComboEditorWindow", editor_card["summary_zh"])
+        self.assertIn("ComboExcelRepository", editor_card["summary_zh"])
+        self.assertIn("ComboValidator", editor_card["summary_zh"])
+        self.assertNotIn("OnGUI", editor_card["summary_zh"])
+        self.assertTrue(any(
+            item["area"] == "EDITOR" for item in story["quick_view"]["new_flow"]
+        ))
+
+    def test_scenario_lens_groups_editor_readiness_by_reader_question(self) -> None:
+        payload = copy.deepcopy(analysis())
+        for index, label in enumerate((
+            "ET.EditorTools.ComboEditorWindow.DrawSkillReadiness()",
+            "ET.EditorTools.MonsterSkillAuthoringService.AnalyzeReadiness()",
+            "ET.EditorTools.ComboEditorWindow.HasAllSkillPrefabs()",
+        )):
+            node = _node("NEW", f"readiness-{index}", "METHOD", label, 180 + index, "ADDED")
+            node["location"]["path"] = "Unity/Assets/Editor/Combo/Tool.cs"
+            payload["diff"]["nodes"].append(node)
+        payload["diff"]["summary"]["new_nodes"] += 3
+        payload["diff"]["summary"]["added_nodes"] += 3
+        payload["diff"]["edges"].append(_edge(
+            "NEW", "readiness-call", "node:new:readiness-0",
+            "node:new:readiness-2", "CALLS", "ADDED",
+        ))
+        payload["diff"]["summary"]["added_edges"] += 1
+
+        story = ChangeStoryBuilder().build(payload)
+        rendered = HtmlChangeStoryRenderer().render(story)
+        lens = story["scenario_lens"]
+        guided = next(
+            item for item in lens["scenarios"]
+            if item["scenario_id"] == "scenario:guided-authoring"
+        )
+
+        validate("change-story.schema.json", story)
+        self.assertLessEqual(len(guided["before"]) + len(guided["after"]), 7)
+        self.assertIn("完成", guided["question_zh"])
+        self.assertTrue(any(
+            item["business_label_zh"] == "计算并显示完成度"
+            for item in guided["after"]
+        ))
+        self.assertEqual("VERIFIED_FLOW", guided["relationship_mode"])
+        self.assertIn("已证实的关系路径", rendered)
+        self.assertIn('<article class="route-row">', rendered)
 
     def test_only_new_worktree_locations_receive_local_links(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -232,6 +471,7 @@ class ChangeStoryTests(unittest.TestCase):
             root = Path(temporary)
             analysis_path = root / "analysis.json"
             output_path = root / "report.html"
+            story_path = root / "story.json"
             evidence_path = root / "intent.json"
             analysis_path.write_text(json.dumps(analysis()), encoding="utf-8")
             evidence_path.write_text(json.dumps({
@@ -242,17 +482,21 @@ class ChangeStoryTests(unittest.TestCase):
             with redirect_stdout(stdout):
                 exit_code = main([
                     "render-report", str(analysis_path), "--output", str(output_path),
+                    "--story-output", str(story_path),
                     "--intent-evidence", str(evidence_path), "--pretty",
                 ])
 
             result = json.loads(stdout.getvalue())
             rendered = output_path.read_text(encoding="utf-8")
+            story_payload = json.loads(story_path.read_text(encoding="utf-8"))
 
         self.assertEqual(0, exit_code)
         self.assertEqual("PARTIAL", result["status"])
         self.assertEqual(64, len(result["story_digest"]))
         self.assertIn("阻止无效奖励", rendered)
         self.assertIn('data-story-digest=', rendered)
+        self.assertEqual(str(story_path.resolve()), result["story_path"])
+        validate("change-story.schema.json", story_payload)
 
     def test_invalid_or_empty_intent_evidence_fails_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "unsupported intent evidence fields"):
