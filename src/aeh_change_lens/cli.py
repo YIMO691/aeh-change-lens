@@ -76,7 +76,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     analyze_change.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
     explain = subcommands.add_parser(
-        "explain", help="一键分析 OLD/NEW Unity 快照并生成快速理解/详细拆解 Change Story"
+        "explain", help="一键分析 OLD/NEW Unity 快照并生成日常简报/场景理解/技术证据 Change Story"
     )
     explain.add_argument("repository", help="Git 仓库根目录")
     explain.add_argument("unity_project", help="仓库内 Unity 项目的相对路径")
@@ -101,7 +101,7 @@ def _parser() -> argparse.ArgumentParser:
     explain.add_argument("--title", default="代码修改逻辑链路", help="报告标题")
     explain.add_argument("--pretty", action="store_true", help="格式化命令结果 JSON")
     render_report = subcommands.add_parser(
-        "render-report", help="将已有 change-analysis JSON 渲染为双层 Change Story"
+        "render-report", help="将已有 change-analysis JSON 渲染为三档阅读 Change Story"
     )
     render_report.add_argument("analysis", help="change-analysis JSON")
     render_report.add_argument("--output", required=True, help="输出的单文件 HTML 报告路径")
@@ -306,7 +306,7 @@ def _story_result(
 def _explain(arguments: argparse.Namespace) -> dict:
     analysis = _analyze_change(arguments)
     if getattr(arguments, "progress", False):
-        print("[change-lens] 聚焦业务变化并生成双层 Change Story", file=sys.stderr, flush=True)
+        print("[change-lens] 聚焦业务变化并生成三档阅读 Change Story", file=sys.stderr, flush=True)
     source_root = Path(arguments.repository)
     result = _story_result(analysis, arguments, repository=os.fspath(source_root))
     if arguments.analysis_output:

@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Change Story turns an evidence-bound OLD/NEW Roslyn graph diff into a self-contained, Chinese-first HTML report with two levels: quick understanding by default and a detailed implementation breakdown on demand. The breakdown reconstructs an engineering structure from evidence; it is not hidden model chain of thought.
+Change Story turns an evidence-bound OLD/NEW Roslyn graph diff into a self-contained, Chinese-first HTML report: one question-first scenario by default, OLD/NEW comparison on demand, and a detailed implementation breakdown as evidence. The breakdown reconstructs an engineering structure from evidence; it is not hidden model chain of thought.
 
 ## Generate in one command
 
@@ -49,13 +49,19 @@ The optional Git repository root creates local links only for NEW worktree locat
 
 Source statements are never promoted to code facts merely because they came from an AI transcript or commit message. Missing source evidence is shown as missing. Intent hypotheses use “may”, carry `INFERRED` confidence, and link to the triggering edge or mapping IDs.
 
-## Two reading levels
+## Three reading depths
 
-The default landing view is Change Map Lite. It classifies the evidence as `MODIFIED`, `ADDED`, `REMOVED`, `TEST_ONLY`, `CONFIG_PROTOCOL`, or `PARALLEL`, then shows a bounded Before / Core change / After map with at most three items per column. The columns are always revision comparison, never calls between the displayed items. When changed edge evidence exists the note directs readers to the detailed relationships; otherwise a parallel marker explicitly avoids implying call order. Added, removed, and test-only work no longer produces empty OLD/NEW flow boxes.
+The default Daily Brief answers “What should I look at first today?” with one plain-language change sentence, up to three memory points, work impact, and two or three verification suggestions. Suggestions remain explicitly separate from code facts and retain evidence references.
+
+Understand the change opens Scenario Lens. It answers one reader question, offers at most five scenarios, and bounds each scenario to at most seven OLD/NEW focus objects and six evidence-backed relationships. Each scenario has its own `change_shape`: `ADDED` and `REMOVED` use an asymmetric full-width capability canvas, while `MODIFIED` uses OLD/NEW columns. Technical names stay collapsed. `VERIFIED_FLOW` renders only listed exact relationships as path cards; `PARALLEL_FACTS` remains directionless.
+
+Check evidence contains staged implementation evidence, decisions, claims, raw paths, impacts, and limitations.
+
+Change Map Lite remains available as an on-demand OLD / NEW comparison. It classifies the evidence as `MODIFIED`, `ADDED`, `REMOVED`, `TEST_ONLY`, `CONFIG_PROTOCOL`, or `PARALLEL`, then shows a bounded Before / Core change / After map with at most three items per column. The columns are always revision comparison, never calls between the displayed items.
 
 Impact scope and the first material risk stay visible. The mental model and up to five area cards move into an optional support disclosure, while long signatures, repeated conditions, generated-code counts, and full graph relationships stay out of the landing view.
 
-The detailed view groups representative objects, relationships, and new decision points by configuration, server, protocol, Unity Editor tooling, client, runtime, and test stages. Full claims, raw paths, symbol tables, impacts, and limitations remain available under collapsed technical evidence.
+The detailed view groups representative objects, relationships, and new decision points by configuration, server, protocol, Unity Editor tooling, client, runtime, and test stages. Stages and decision sections are collapsed by default. Full claims, raw paths, symbol tables, impacts, and limitations remain available under collapsed technical evidence.
 
 `--story-output` optionally writes the same focused `change-story.json`; Codex should read it before the much larger `change-analysis.json`.
 

@@ -199,14 +199,28 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertLessEqual(len(first["quick_view"]["new_flow"]), 8)
         self.assertTrue(first["quick_view"]["old_flow"])
         self.assertTrue(first["quick_view"]["new_flow"])
-        self.assertEqual("1.2.0", first["schema_version"])
+        self.assertEqual("1.5.0", first["schema_version"])
         self.assertEqual("MODIFIED", first["visual_map"]["change_shape"])
         self.assertEqual("VERIFIED_FLOW", first["visual_map"]["relationship_mode"])
         self.assertLessEqual(len(first["visual_map"]["changes"]), 3)
         self.assertLessEqual(len(first["visual_map"]["before"]), 3)
         self.assertLessEqual(len(first["visual_map"]["after"]), 3)
         self.assertTrue(first["deep_dive"]["stages"])
+        self.assertTrue(first["scenario_lens"]["scenarios"])
+        self.assertLessEqual(len(first["scenario_lens"]["scenarios"]), 5)
+        self.assertLessEqual(len(first["scenario_lens"]["takeaways_zh"]), 3)
+        self.assertEqual(
+            len(first["scenario_lens"]["takeaways_zh"]),
+            len(first["scenario_lens"]["takeaways_en"]),
+        )
         self.assertIn("来源证据", first["deep_dive"]["method_note_zh"])
+        self.assertEqual(
+            first["scenario_lens"]["primary_scenario_id"],
+            first["daily_brief"]["primary_scenario_id"],
+        )
+        self.assertGreaterEqual(len(first["daily_brief"]["checks"]), 2)
+        self.assertLessEqual(len(first["daily_brief"]["checks"]), 3)
+        self.assertTrue(all(item["evidence_refs"] for item in first["daily_brief"]["checks"]))
 
     def test_absent_source_evidence_is_disclosed_not_invented(self) -> None:
         story = ChangeStoryBuilder().build(analysis())
@@ -227,11 +241,22 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertIn("新链路", rendered)
         self.assertIn("CODE_FACT", rendered)
         self.assertIn("INTENT_INFERENCE", rendered)
-        self.assertIn("快速理解", rendered)
-        self.assertIn("详细思路拆解", rendered)
-        self.assertIn('id="tab-quick" checked', rendered)
-        self.assertIn("一眼看懂", rendered)
+        self.assertIn("只看结论", rendered)
+        self.assertIn("理解改法", rendered)
+        self.assertIn("核对证据", rendered)
+        self.assertIn('id="tab-daily" checked', rendered)
+        self.assertIn("我今天应该先看什么", rendered)
+        self.assertIn("建议先验证", rendered)
+        self.assertIn("这是检查建议，不是代码事实", rendered)
+        self.assertIn("先记住这三点", rendered)
+        self.assertIn('class="takeaways"', rendered)
+        self.assertIn("主场景 · MODIFIED", rendered)
+        self.assertIn("选择你要理解的问题", rendered)
+        self.assertIn("scenario-view-0", rendered)
+        self.assertIn("展开完整 OLD / NEW 版本对照", rendered)
+        self.assertNotIn('<details class="stage" open>', rendered)
         self.assertIn('data-change-shape="MODIFIED"', rendered)
+        self.assertIn('data-scenario-shape="MODIFIED"', rendered)
         self.assertIn('aria-label="版本变化，不表示调用"', rendered)
         self.assertIn("奖励 &lt;script&gt;alert(1)&lt;/script&gt;", rendered)
         self.assertNotIn("<script", rendered.lower())
@@ -257,10 +282,18 @@ class ChangeStoryTests(unittest.TestCase):
         for node in payload["diff"]["nodes"]:
             node["location"]["path"] = "Unity/Assets/Editor/Combo/Tool.cs"
         story = ChangeStoryBuilder().build(payload)
+        rendered = HtmlChangeStoryRenderer().render(story)
 
         self.assertEqual("ADDED", story["visual_map"]["change_shape"])
+        self.assertTrue(all(
+            scenario["change_shape"] == "ADDED"
+            for scenario in story["scenario_lens"]["scenarios"]
+        ))
         self.assertIn("旧版本未发现对应结构信号", story["visual_map"]["before"][0]["label_zh"])
         self.assertIn("Unity 编辑器工具", story["visual_map"]["after"][0]["label_zh"])
+        self.assertIn('data-scenario-shape="ADDED"', rendered)
+        self.assertIn('class="scenario-single"', rendered)
+        self.assertNotIn("旧版本没有进入该场景的聚焦变化证据", rendered)
 
     def test_removed_and_configuration_changes_use_shape_specific_maps(self) -> None:
         for role, change, path, expected in (
@@ -355,6 +388,43 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertTrue(any(
             item["area"] == "EDITOR" for item in story["quick_view"]["new_flow"]
         ))
+
+    def test_scenario_lens_groups_editor_readiness_by_reader_question(self) -> None:
+        payload = copy.deepcopy(analysis())
+        for index, label in enumerate((
+            "ET.EditorTools.ComboEditorWindow.DrawSkillReadiness()",
+            "ET.EditorTools.MonsterSkillAuthoringService.AnalyzeReadiness()",
+            "ET.EditorTools.ComboEditorWindow.HasAllSkillPrefabs()",
+        )):
+            node = _node("NEW", f"readiness-{index}", "METHOD", label, 180 + index, "ADDED")
+            node["location"]["path"] = "Unity/Assets/Editor/Combo/Tool.cs"
+            payload["diff"]["nodes"].append(node)
+        payload["diff"]["summary"]["new_nodes"] += 3
+        payload["diff"]["summary"]["added_nodes"] += 3
+        payload["diff"]["edges"].append(_edge(
+            "NEW", "readiness-call", "node:new:readiness-0",
+            "node:new:readiness-2", "CALLS", "ADDED",
+        ))
+        payload["diff"]["summary"]["added_edges"] += 1
+
+        story = ChangeStoryBuilder().build(payload)
+        rendered = HtmlChangeStoryRenderer().render(story)
+        lens = story["scenario_lens"]
+        guided = next(
+            item for item in lens["scenarios"]
+            if item["scenario_id"] == "scenario:guided-authoring"
+        )
+
+        validate("change-story.schema.json", story)
+        self.assertLessEqual(len(guided["before"]) + len(guided["after"]), 7)
+        self.assertIn("完成", guided["question_zh"])
+        self.assertTrue(any(
+            item["business_label_zh"] == "计算并显示完成度"
+            for item in guided["after"]
+        ))
+        self.assertEqual("VERIFIED_FLOW", guided["relationship_mode"])
+        self.assertIn("已证实的关系路径", rendered)
+        self.assertIn('<article class="route-row">', rendered)
 
     def test_only_new_worktree_locations_receive_local_links(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

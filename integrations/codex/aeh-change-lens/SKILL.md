@@ -5,7 +5,7 @@ description: Explicitly use AEH Change Lens for a quick change-shape map or deta
 
 # AEH Change Lens
 
-Use the local Change Lens tool as a read-only analysis assistant for the user's Unity/gameplay work. Default to a Chinese-first quick understanding of what changed. Use the detailed implementation breakdown when the user asks why, how, or for a step-by-step explanation.
+Use the local Change Lens tool as a read-only analysis assistant for the user's Unity/gameplay work. Default to a Chinese-first daily brief of what changed, why it matters, and what to verify. Use scenario understanding when the user asks how it works, and detailed evidence for step-by-step or technical review.
 
 Before running an analysis, read [references/workflow.md](references/workflow.md) completely.
 
@@ -17,7 +17,7 @@ Before running an analysis, read [references/workflow.md](references/workflow.md
 - Comparison: `HEAD` to `WORKTREE`
 - Language: Chinese first
 - Output: outside the analyzed repository
-- Reading mode: quick understanding unless the user explicitly requests detailed breakdown
+- Reading mode: `daily_brief` by default; use Scenario Lens when the user asks how the change works, and detailed evidence only when requested
 
 Do not expose assembly names, request IDs, manifests, digests, or Worker setup unless they affect the result or the user asks for technical evidence.
 
@@ -35,6 +35,8 @@ Never claim access to hidden model reasoning. Keep these layers distinct:
 
 ## Handoff
 
-Read the focused `change-story.json` before the full analysis JSON. In quick mode, lead with `visual_map`: state its change shape, headline, bounded Before / Core change / After items, impact, first material risk, and whether relationships are verified flow or parallel facts. Never turn `PARALLEL_FACTS` into a narrated call sequence. In detailed mode, additionally explain the staged implementation structure and decision points, keeping code facts, source evidence, and inference distinct.
+Read the focused `change-story.json` before the full analysis JSON. In daily mode, lead with `daily_brief.what_changed_zh`, its one to three bounded memory points, and `daily_brief.checks`; clearly call checks suggestions rather than code facts. Do not name every scenario unless the user asks how the change works. Use `scenario_lens` for that explanation, and `visual_map` only for a requested OLD / NEW comparison or as a short secondary confirmation.
+
+When the user selects a scenario, explain only that scenario. Use its `change_shape` to distinguish a newly introduced scene, a removed scene, and a modified before/after comparison. Respect its `relationship_mode`: `VERIFIED_FLOW` permits only the exact listed relationships; `PARALLEL_FACTS` must remain a set of related facts rather than a narrated call sequence. In detailed mode, expand that selected scenario first, then use staged implementation structure and decision points as evidence while keeping code facts, source evidence, and inference distinct.
 
 State `PARTIAL` prominently when present. Do not dump raw node/edge counts unless asked for technical evidence. Open the report in a visible browser only when the user asks to open it.

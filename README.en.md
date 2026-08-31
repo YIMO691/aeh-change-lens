@@ -90,7 +90,7 @@ See [Change Story](docs/CHANGE_STORY.en.md) for the complete command and intent-
 
 ## Output
 
-The default landing view is Change Map Lite. It classifies a change as modified, added, removed, test-only, configuration/protocol, or parallel facts, then presents one bounded Before / Core change / After map with impact and the first material risk. Arrows appear only when the analysis contains changed relationship evidence; otherwise the report explicitly presents parallel facts without implying call order.
+The default landing view is a Daily Brief: one plain-language change sentence, up to three memory points, work impact, and two or three clearly labeled verification suggestions. Readers then choose Understand the change for Scenario Lens or Check evidence for the full technical view. Added and removed scenarios use an asymmetric full-width canvas instead of an empty half. Verified relationships become individually inspectable path cards; exact relationship evidence is never replaced with display-order storytelling.
 
 The detailed view retains staged implementation evidence, decisions, raw OLD/NEW chains, claims, impacts, and limitations. The optional `change-story.json` lets Codex read the focused map before opening the full analysis.
 

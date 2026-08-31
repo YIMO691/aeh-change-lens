@@ -25,15 +25,19 @@ class CodexSkillIntegrationTests(unittest.TestCase):
         self.assertIn("$aeh-change-lens", metadata["interface"]["default_prompt"])
         self.assertIn("Never run `export-compile-manifest`", instructions)
         self.assertIn("--allow-syntax-partial", instructions)
-        self.assertIn("quick understanding", instructions)
+        self.assertIn("Chinese-first daily brief", instructions)
         self.assertIn("change-story.json", instructions)
+        self.assertIn("daily_brief.what_changed_zh", instructions)
 
         workflow = (SKILL / "references/workflow.md").read_text(encoding="utf-8")
         self.assertIn("D:\\ares2\\project\\ET6", workflow)
         self.assertIn("--allow-syntax-partial", workflow)
         self.assertIn("--progress", workflow)
         self.assertIn("--story-output", workflow)
-        self.assertIn("visual_map.headline_zh", workflow)
+        self.assertIn("scenario_lens.takeaways_zh", workflow)
+        self.assertIn("daily_brief.what_changed_zh", workflow)
+        self.assertIn("daily_brief.checks", workflow)
+        self.assertIn("change_shape=ADDED", workflow)
         self.assertIn("PARALLEL_FACTS", workflow)
         self.assertIn("deep_dive.stages", workflow)
 
@@ -48,7 +52,7 @@ class CodexSkillIntegrationTests(unittest.TestCase):
 
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertIn("explain", completed.stdout)
-        self.assertIn("生成快速理解/详细拆解 Change Story", completed.stdout)
+        self.assertIn("生成日常简报/场景理解/技术证据 Change Story", completed.stdout)
 
 
 if __name__ == "__main__":

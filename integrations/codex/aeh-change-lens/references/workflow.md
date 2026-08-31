@@ -78,15 +78,16 @@ Require exit code zero, present HTML/story/analysis files, and matching analysis
 
 For quick understanding, report:
 
-- `visual_map.change_shape` and `visual_map.headline_zh`;
-- the bounded `before` / `changes` / `after` items without raw signatures;
-- `visual_map.impact_zh` and `visual_map.risk_zh`;
-- whether `relationship_mode` is `VERIFIED_FLOW` or `PARALLEL_FACTS`.
+- `daily_brief.what_changed_zh` as the one-sentence answer;
+- the one to three `scenario_lens.takeaways_zh` memory points;
+- `daily_brief.why_it_matters_zh` as work context;
+- at most three `daily_brief.checks`, explicitly introduced as verification suggestions rather than code facts.
 
-Do not narrate `PARALLEL_FACTS` in display order as a call chain. Use `quick_view` only for optional area and mental-model context after the visual map.
+Do not enumerate scenarios in daily mode. When the user asks how the change works, explain the primary scenario question and at most three other scenario titles. Interpret `change_shape=ADDED` or `REMOVED` as an asymmetric scene rather than inventing an empty OLD or NEW lane. Do not narrate `PARALLEL_FACTS` in display order as a call chain. Use `visual_map` only when an OLD / NEW version comparison is requested, and use `quick_view` only for optional area and mental-model context.
 
 For a requested detailed breakdown, additionally report:
 
+- only the selected `scenario_lens.scenarios` entry first;
 - `deep_dive.stages` and representative relationships;
 - `deep_dive.decision_points`;
 - source-backed rationale separately from inferred rationale;

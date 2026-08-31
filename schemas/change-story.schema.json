@@ -6,11 +6,11 @@
   "additionalProperties": false,
   "required": [
     "schema_version", "story_id", "language", "status", "title",
-    "analysis_digest", "revisions", "overview", "quick_view", "visual_map", "deep_dive", "lanes", "changes",
+    "analysis_digest", "revisions", "overview", "quick_view", "visual_map", "scenario_lens", "daily_brief", "deep_dive", "lanes", "changes",
     "claims", "impacts", "limitations", "canonical_digest"
   ],
   "properties": {
-    "schema_version": { "const": "1.2.0" },
+    "schema_version": { "const": "1.5.0" },
     "story_id": { "type": "string", "pattern": "^story:[a-f0-9]{24}$" },
     "language": { "const": "zh-CN" },
     "status": { "enum": ["FRESH", "PARTIAL"] },
@@ -35,6 +35,8 @@
     },
     "quick_view": { "$ref": "#/$defs/quick_view" },
     "visual_map": { "$ref": "#/$defs/visual_map" },
+    "scenario_lens": { "$ref": "#/$defs/scenario_lens" },
+    "daily_brief": { "$ref": "#/$defs/daily_brief" },
     "deep_dive": { "$ref": "#/$defs/deep_dive" },
     "lanes": {
       "type": "object", "additionalProperties": false,
@@ -185,6 +187,118 @@
         "impact_en": { "type": "string", "minLength": 1 },
         "risk_zh": { "type": "string", "minLength": 1 },
         "risk_en": { "type": "string", "minLength": 1 }
+      }
+    },
+    "scenario_item": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "item_id", "role", "business_label_zh", "business_label_en", "technical_label",
+        "area", "change", "confidence", "evidence_refs", "location"
+      ],
+      "properties": {
+        "item_id": { "type": "string", "pattern": "^scenario-item:[a-f0-9]{16}$" },
+        "role": { "enum": ["BEFORE", "AFTER"] },
+        "business_label_zh": { "type": "string", "minLength": 1 },
+        "business_label_en": { "type": "string", "minLength": 1 },
+        "technical_label": { "type": "string", "minLength": 1 },
+        "area": { "$ref": "#/$defs/area" },
+        "change": { "$ref": "common.schema.json#/$defs/change_kind" },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" },
+        "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "location": { "$ref": "common.schema.json#/$defs/source_location" }
+      }
+    },
+    "scenario_relationship": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "edge_id", "source_item_id", "target_item_id", "relation", "relation_zh",
+        "change", "confidence", "evidence_refs"
+      ],
+      "properties": {
+        "edge_id": { "type": "string", "minLength": 1 },
+        "source_item_id": { "type": "string", "pattern": "^scenario-item:[a-f0-9]{16}$" },
+        "target_item_id": { "type": "string", "pattern": "^scenario-item:[a-f0-9]{16}$" },
+        "relation": { "type": "string", "minLength": 1 },
+        "relation_zh": { "type": "string", "minLength": 1 },
+        "change": { "$ref": "common.schema.json#/$defs/change_kind" },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" },
+        "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "scenario": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "scenario_id", "order", "icon", "title_zh", "title_en", "question_zh", "question_en",
+        "answer_zh", "answer_en", "change_shape", "relationship_mode", "before", "after", "relationships", "evidence_refs"
+      ],
+      "properties": {
+        "scenario_id": { "type": "string", "pattern": "^scenario:[a-z-]+$" },
+        "order": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "icon": { "type": "string", "minLength": 1 },
+        "title_zh": { "type": "string", "minLength": 1 },
+        "title_en": { "type": "string", "minLength": 1 },
+        "question_zh": { "type": "string", "minLength": 1 },
+        "question_en": { "type": "string", "minLength": 1 },
+        "answer_zh": { "type": "string", "minLength": 1 },
+        "answer_en": { "type": "string", "minLength": 1 },
+        "change_shape": { "enum": ["MODIFIED", "ADDED", "REMOVED", "PARALLEL"] },
+        "relationship_mode": { "enum": ["VERIFIED_FLOW", "PARALLEL_FACTS"] },
+        "before": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/scenario_item" } },
+        "after": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/scenario_item" } },
+        "relationships": { "type": "array", "maxItems": 6, "items": { "$ref": "#/$defs/scenario_relationship" } },
+        "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "scenario_lens": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "primary_scenario_id", "summary_zh", "summary_en", "outcome_zh", "outcome_en", "takeaways_zh", "takeaways_en",
+        "scope_note_zh", "scope_note_en", "scenarios", "visual_map_shape"
+      ],
+      "properties": {
+        "primary_scenario_id": { "type": "string", "pattern": "^scenario:[a-z-]+$" },
+        "summary_zh": { "type": "string", "minLength": 1 },
+        "summary_en": { "type": "string", "minLength": 1 },
+        "outcome_zh": { "type": "string", "minLength": 1 },
+        "outcome_en": { "type": "string", "minLength": 1 },
+        "takeaways_zh": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "string", "minLength": 1 } },
+        "takeaways_en": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "string", "minLength": 1 } },
+        "scope_note_zh": { "type": "string", "minLength": 1 },
+        "scope_note_en": { "type": "string", "minLength": 1 },
+        "scenarios": { "type": "array", "minItems": 1, "maxItems": 5, "items": { "$ref": "#/$defs/scenario" } },
+        "visual_map_shape": { "enum": ["MODIFIED", "ADDED", "REMOVED", "TEST_ONLY", "CONFIG_PROTOCOL", "PARALLEL"] }
+      }
+    },
+    "daily_check": {
+      "type": "object", "additionalProperties": false,
+      "required": ["check_id", "kind", "action_zh", "action_en", "evidence_refs"],
+      "properties": {
+        "check_id": { "type": "string", "pattern": "^daily-check:[a-z-]+$" },
+        "kind": { "enum": ["PRIMARY_BEHAVIOR", "SECONDARY_BEHAVIOR", "RELATIONSHIP_PATH", "EVIDENCE_BOUNDARY", "REGRESSION"] },
+        "action_zh": { "type": "string", "minLength": 1 },
+        "action_en": { "type": "string", "minLength": 1 },
+        "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "daily_brief": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "question_zh", "question_en", "what_changed_zh", "what_changed_en",
+        "why_it_matters_zh", "why_it_matters_en", "confidence_note_zh", "confidence_note_en",
+        "primary_scenario_id", "change_shape", "checks"
+      ],
+      "properties": {
+        "question_zh": { "type": "string", "minLength": 1 },
+        "question_en": { "type": "string", "minLength": 1 },
+        "what_changed_zh": { "type": "string", "minLength": 1 },
+        "what_changed_en": { "type": "string", "minLength": 1 },
+        "why_it_matters_zh": { "type": "string", "minLength": 1 },
+        "why_it_matters_en": { "type": "string", "minLength": 1 },
+        "confidence_note_zh": { "type": "string", "minLength": 1 },
+        "confidence_note_en": { "type": "string", "minLength": 1 },
+        "primary_scenario_id": { "type": "string", "pattern": "^scenario:[a-z-]+$" },
+        "change_shape": { "enum": ["MODIFIED", "ADDED", "REMOVED", "PARALLEL"] },
+        "checks": { "type": "array", "minItems": 2, "maxItems": 3, "items": { "$ref": "#/$defs/daily_check" } }
       }
     },
     "stage_relationship": {

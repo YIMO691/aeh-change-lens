@@ -287,7 +287,7 @@ class RevisionChangeAnalyzerTests(unittest.TestCase):
             for item in analysis["diff"]["mappings"]
         ))
         self.assertIn("预检 OLD/NEW revision 编译基线", progress.getvalue())
-        self.assertIn("生成双层 Change Story", progress.getvalue())
+        self.assertIn("生成三档阅读 Change Story", progress.getvalue())
         rendered = report_path.read_text(encoding="utf-8")
         self.assertIn("PARTIAL", rendered)
         self.assertIn("PARTIAL 结构分析显示", rendered)
