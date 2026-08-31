@@ -4,6 +4,7 @@ import hashlib
 import html
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -56,6 +57,30 @@ _CHANGE_EN = {
 _MAX_RELATIONSHIPS = 80
 _MAX_CHAINS = 16
 _MAX_CHAIN_HOPS = 8
+_MAX_QUICK_CARDS = 5
+_MAX_FLOW_STEPS = 8
+_MAX_STAGE_ITEMS = 6
+_MAX_DECISIONS = 6
+
+_AREA_ORDER = {
+    "CONFIGURATION": 0,
+    "SERVER": 1,
+    "PROTOCOL": 2,
+    "CLIENT": 3,
+    "RUNTIME": 4,
+    "TEST": 5,
+    "GENERATED": 6,
+}
+
+_AREA_LABELS = {
+    "CONFIGURATION": ("配置与规则", "Configuration and rules", "📋"),
+    "SERVER": ("服务端编排", "Server orchestration", "🧠"),
+    "PROTOCOL": ("协议与数据", "Protocol and data", "🛰️"),
+    "CLIENT": ("客户端表现", "Client behavior", "🎮"),
+    "RUNTIME": ("运行逻辑", "Runtime logic", "⚙️"),
+    "TEST": ("测试保障", "Test coverage", "🧪"),
+    "GENERATED": ("生成代码", "Generated code", "🧩"),
+}
 
 
 def _canonical_digest(value: object) -> str:
@@ -129,18 +154,15 @@ class ChangeStoryBuilder:
         )
 
         summary = dict(diff["summary"])
-        headline_zh = (
-            f"新增 {summary['added_nodes']} 个节点、删除 {summary['removed_nodes']} 个节点，"
-            f"修改 {summary['updated_node_pairs']} 对、移动 {summary['moved_node_pairs']} 对；"
-            f"关系新增 {summary['added_edges']} 条、删除 {summary['removed_edges']} 条。"
-        )
-        headline_en = (
-            f"{summary['added_nodes']} nodes added, {summary['removed_nodes']} removed, "
-            f"{summary['updated_node_pairs']} updated and {summary['moved_node_pairs']} moved; "
-            f"{summary['added_edges']} relationships added and {summary['removed_edges']} removed."
+        quick_view, deep_dive = self._story_views(
+            analysis=analysis,
+            nodes=nodes,
+            edges=edges,
+            mappings=mappings,
+            source_claims=source_claims,
         )
         semantic = {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "story_id": f"story:{analysis_digest[:24]}",
             "language": "zh-CN",
             "status": str(analysis["status"]),
@@ -148,10 +170,12 @@ class ChangeStoryBuilder:
             "analysis_digest": analysis_digest,
             "revisions": analysis["revisions"],
             "overview": {
-                "headline_zh": headline_zh,
-                "headline_en": headline_en,
+                "headline_zh": quick_view["summary_zh"],
+                "headline_en": quick_view["summary_en"],
                 "counts": summary,
             },
+            "quick_view": quick_view,
+            "deep_dive": deep_dive,
             "lanes": lanes,
             "changes": changes,
             "claims": sorted(claims, key=lambda item: item["claim_id"]),
@@ -348,6 +372,520 @@ class ChangeStoryBuilder:
             })
         return changes[:120]
 
+    @staticmethod
+    def _area(node: Mapping[str, object]) -> str:
+        location = node.get("location")
+        path = str(location.get("path", "") if isinstance(location, Mapping) else "")
+        normalized = "/" + path.replace("\\", "/").lower().strip("/") + "/"
+        if "/tests/" in normalized or "/test/" in normalized:
+            return "TEST"
+        if any(token in normalized for token in ("/config/", "/configpartial/", "config.cs/")):
+            return "CONFIGURATION"
+        if any(token in normalized for token in ("/message/", "outermessage", ".proto/", "/proto/", "opcode")):
+            return "PROTOCOL"
+        if "/generate/" in normalized or "/generated/" in normalized:
+            return "GENERATED"
+        if normalized.startswith("/server/") or "/server/" in normalized:
+            return "SERVER"
+        if normalized.startswith("/unity/") or any(
+            token in normalized for token in ("/client/", "/hotfixview/", "/assets/")
+        ):
+            return "CLIENT"
+        return "RUNTIME"
+
+    @staticmethod
+    def _short_label(value: object) -> str:
+        label = str(value)
+        return re.sub(r"^(?:global::)?(?:ET|Game|ChangeLens\.Fixture)\.", "", label)
+
+    @classmethod
+    def _compact_label(cls, value: object) -> str:
+        label = cls._short_label(value)
+        if "(" in label:
+            head = label.split("(", 1)[0]
+            parts = head.split(".")
+            return f"{'.'.join(parts[-2:])}()"
+        return label.rsplit(".", 1)[-1]
+
+    @classmethod
+    def _headline_label(cls, value: object) -> str:
+        label = cls._compact_label(value)
+        return label.rsplit(".", 1)[-1]
+
+    @classmethod
+    def _label_tokens(cls, value: object) -> set[str]:
+        label = cls._short_label(value)
+        words = re.findall(r"[A-Z]+(?=[A-Z][a-z]|\d|\b)|[A-Z]?[a-z]+|\d+", label)
+        ignored = {
+            "system", "component", "category", "config", "helper", "program", "unit",
+            "get", "set", "create", "resolve", "validate", "build", "try", "on", "by",
+            "list", "generic", "int", "float", "string", "vector", "void", "bool",
+            "random", "bullet", "data", "info", "index", "count", "active", "display",
+        }
+        return {word.lower() for word in words if len(word) > 2 and word.lower() not in ignored}
+
+    def _node_score(self, node: Mapping[str, object], changed_degree: int = 0) -> int:
+        score = {
+            "ADDED": 12,
+            "REMOVED": 11,
+            "UPDATED": 10,
+            "MOVED": 9,
+            "UNCHANGED_CONTEXT": -8,
+        }.get(str(node.get("change")), 0)
+        score += {
+            "METHOD": 7,
+            "TYPE": 5,
+            "STATE": 3,
+            "EVENT": 3,
+            "CONDITION": 1,
+        }.get(str(node.get("kind")), 0)
+        label = str(node.get("label", ""))
+        if re.search(r"(?:^|\.)(?:Try|On|Handle|Execute|Create|Resolve|Validate|Load|Send|Broadcast|GetRandom)", label):
+            score += 4
+        if re.search(r"(?:^|\.)(?:On|Handle|Execute)[A-Z]", label):
+            score += 3
+        if re.search(r"(?:^|\.)Try[A-Z]", label):
+            score += 2
+        area = self._area(node)
+        if area == "GENERATED":
+            score -= 12
+        elif area == "TEST":
+            score -= 7
+        elif area in {"CONFIGURATION", "SERVER", "PROTOCOL", "CLIENT"}:
+            score += 3
+        return score + min(changed_degree, 5)
+
+    def _focus_nodes(
+        self, nodes: Mapping[str, dict], edges: Sequence[dict]
+    ) -> list[dict]:
+        degree: dict[str, int] = {}
+        for edge in edges:
+            if edge.get("change") == "UNCHANGED_CONTEXT":
+                continue
+            for key in ("source_node_id", "target_node_id"):
+                node_id = edge.get(key)
+                if isinstance(node_id, str):
+                    degree[node_id] = degree.get(node_id, 0) + 1
+        selected = [
+            node for node in nodes.values()
+            if node.get("change") != "UNCHANGED_CONTEXT"
+        ]
+        selected.sort(key=lambda node: (
+            -self._node_score(node, degree.get(str(node["node_id"]), 0)),
+            _AREA_ORDER[self._area(node)],
+            str(node.get("label", "")),
+            str(node.get("node_id", "")),
+        ))
+        return selected
+
+    def _change_cards(self, focus_nodes: Sequence[dict], topic_tokens: set[str]) -> list[dict]:
+        grouped: dict[str, list[dict]] = {}
+        for node in focus_nodes:
+            grouped.setdefault(self._area(node), []).append(node)
+        ranked_areas = sorted(
+            grouped,
+            key=lambda area: (
+                -sum(max(self._node_score(node), 0) for node in grouped[area][:8]),
+                _AREA_ORDER[area],
+            ),
+        )
+        non_generated = [area for area in ranked_areas if area != "GENERATED"]
+        if non_generated:
+            ranked_areas = non_generated
+        cards: list[dict] = []
+        for area in ranked_areas[:_MAX_QUICK_CARDS]:
+            candidates = grouped[area]
+            minimum_overlap = 1 if area == "TEST" else 2
+            topic_candidates = [
+                node for node in candidates
+                if len(self._label_tokens(node["label"]) & topic_tokens) >= minimum_overlap
+            ]
+            if topic_candidates:
+                candidates = topic_candidates
+            unique: list[dict] = []
+            seen: set[str] = set()
+            for node in candidates:
+                label = self._short_label(node["label"])
+                if label in seen or node.get("kind") in {"CONDITION", "RETURN"}:
+                    continue
+                seen.add(label)
+                unique.append(node)
+                if len(unique) == 3:
+                    break
+            if not unique:
+                unique = candidates[:2]
+            names = "、".join(self._headline_label(node["label"]) for node in unique)
+            label_zh, label_en, icon = _AREA_LABELS[area]
+            cards.append({
+                "card_id": f"card:{area.lower()}",
+                "area": area,
+                "icon": icon,
+                "title_zh": label_zh,
+                "title_en": label_en,
+                "summary_zh": f"重点包括 {names}；完整数量与语法细节已折叠。",
+                "summary_en": f"Key changed symbols: {', '.join(self._headline_label(node['label']) for node in unique)}; full counts and syntax details are collapsed.",
+                "evidence_refs": [str(node["node_id"]) for node in unique],
+                "locations": [node["location"] for node in unique],
+            })
+        return cards
+
+    def _context_change_cards(
+        self,
+        nodes: Mapping[str, dict],
+        mappings: Sequence[dict],
+        focus_nodes: Sequence[dict],
+        existing_areas: set[str],
+    ) -> list[dict]:
+        focus_text = " ".join(str(node.get("label", "")) for node in focus_nodes)
+        candidates: dict[str, tuple[dict, dict]] = {}
+        for mapping in mappings:
+            old = nodes[mapping["old_node_id"]]
+            new = nodes[mapping["new_node_id"]]
+            old_location, new_location = old.get("location"), new.get("location")
+            if not isinstance(old_location, Mapping) or not isinstance(new_location, Mapping):
+                continue
+            area = self._area(new)
+            if area in existing_areas or area == "GENERATED" or new.get("kind") != "TYPE":
+                continue
+            if old_location.get("content_hash") == new_location.get("content_hash"):
+                continue
+            simple_name = self._compact_label(new["label"])
+            if simple_name not in focus_text:
+                continue
+            candidates.setdefault(area, (mapping, new))
+        cards = []
+        for area in sorted(candidates, key=lambda item: _AREA_ORDER[item]):
+            mapping, node = candidates[area]
+            label_zh, label_en, icon = _AREA_LABELS[area]
+            name = self._compact_label(node["label"])
+            cards.append({
+                "card_id": f"card:{area.lower()}-context",
+                "area": area,
+                "icon": icon,
+                "title_zh": label_zh,
+                "title_en": label_en,
+                "summary_zh": f"相关文件内容发生变化，业务上下文包括 {name}；字段级差异需展开证据查看。",
+                "summary_en": f"A related file changed around {name}; expand the evidence for field-level details.",
+                "evidence_refs": [mapping["mapping_id"], node["node_id"]],
+                "locations": [node["location"]],
+            })
+        return cards
+
+    def _flow_steps(
+        self, role: str, focus_nodes: Sequence[dict], topic_tokens: set[str]
+    ) -> list[dict]:
+        candidates = [node for node in focus_nodes if node.get("revision") == role]
+        grouped: dict[str, list[dict]] = {}
+        for node in candidates:
+            area = self._area(node)
+            if area in {"GENERATED", "TEST"}:
+                continue
+            grouped.setdefault(area, []).append(node)
+        steps: list[dict] = []
+        for area in sorted(grouped, key=lambda item: _AREA_ORDER[item]):
+            picked: list[dict] = []
+            seen: set[str] = set()
+            area_candidates = [
+                node for node in grouped[area]
+                if len(self._label_tokens(node["label"]) & topic_tokens) >= 2
+            ]
+            area_limit = 4 if role == "NEW" and area == "SERVER" else 2
+            for node in area_candidates:
+                if node.get("kind") not in {"METHOD", "TYPE", "EVENT", "STATE"}:
+                    continue
+                label = self._compact_label(node["label"])
+                if label in seen:
+                    continue
+                seen.add(label)
+                picked.append(node)
+                if len(picked) == area_limit:
+                    break
+            picked.sort(key=lambda node: (
+                str(node["location"]["path"]), int(node["location"]["start_line"]),
+                str(node["node_id"]),
+            ))
+            for node in picked:
+                label_zh, label_en, _ = _AREA_LABELS[area]
+                identity = f"{role}:{node['node_id']}"
+                steps.append({
+                    "step_id": f"flow:{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:16]}",
+                    "order": len(steps) + 1,
+                    "area": area,
+                    "area_label_zh": label_zh,
+                    "area_label_en": label_en,
+                    "label": self._compact_label(node["label"]),
+                    "kind": node["kind"],
+                    "change": node["change"],
+                    "confidence": node["provenance"]["confidence"],
+                    "evidence_refs": [node["node_id"]],
+                    "location": node["location"],
+                })
+                if len(steps) == _MAX_FLOW_STEPS:
+                    return steps
+        return steps
+
+    def _deep_stages(
+        self, focus_nodes: Sequence[dict], nodes: Mapping[str, dict], edges: Sequence[dict]
+    ) -> list[dict]:
+        grouped: dict[str, list[dict]] = {}
+        for node in focus_nodes:
+            area = self._area(node)
+            if area == "GENERATED":
+                continue
+            grouped.setdefault(area, []).append(node)
+        stages: list[dict] = []
+        for area in sorted(grouped, key=lambda item: _AREA_ORDER[item]):
+            candidates = grouped[area]
+            items = []
+            seen: set[tuple[str, str]] = set()
+            for node in candidates:
+                key = (str(node["revision"]), self._short_label(node["label"]))
+                if key in seen or node.get("kind") in {"CONDITION", "RETURN"}:
+                    continue
+                seen.add(key)
+                items.append({**self._node_projection(node), "label": self._short_label(node["label"])})
+                if len(items) == _MAX_STAGE_ITEMS:
+                    break
+            if not items:
+                continue
+            related = []
+            for edge in edges:
+                if edge.get("change") == "UNCHANGED_CONTEXT":
+                    continue
+                source = nodes[edge["source_node_id"]]
+                target = nodes[edge["target_node_id"]]
+                if self._area(source) != area or self._area(target) != area:
+                    continue
+                if self._area(source) == "GENERATED" or self._area(target) == "GENERATED":
+                    continue
+                related.append({
+                    "edge_id": edge["edge_id"],
+                    "source_label": self._short_label(source["label"]),
+                    "target_label": self._short_label(target["label"]),
+                    "relation": edge["relation"],
+                    "relation_zh": _RELATION_ZH.get(edge["relation"], edge["relation"]),
+                    "change": edge["change"],
+                    "confidence": edge["provenance"]["confidence"],
+                })
+            related.sort(key=lambda item: (
+                0 if item["relation"] == "DIRECT_CALL" else 1,
+                item["source_label"], item["target_label"], item["edge_id"],
+            ))
+            counts = {
+                kind: sum(1 for node in candidates if node.get("change") == kind)
+                for kind in ("ADDED", "UPDATED", "REMOVED")
+            }
+            label_zh, label_en, icon = _AREA_LABELS[area]
+            stages.append({
+                "stage_id": f"stage:{area.lower()}",
+                "order": len(stages) + 1,
+                "area": area,
+                "icon": icon,
+                "title_zh": label_zh,
+                "title_en": label_en,
+                "summary_zh": (
+                    f"从新增 {counts['ADDED']}、修改 {counts['UPDATED']}、删除 {counts['REMOVED']} "
+                    f"个结构信号中，聚焦 {len(items)} 个代表对象。"
+                ),
+                "summary_en": (
+                    f"Focused {len(items)} representative objects from {counts['ADDED']} added, "
+                    f"{counts['UPDATED']} updated and {counts['REMOVED']} removed structural signals."
+                ),
+                "items": items,
+                "relationships": related[:8],
+            })
+        return stages
+
+    def _decision_points(
+        self, focus_nodes: Sequence[dict], nodes: Mapping[str, dict], edges: Sequence[dict]
+    ) -> list[dict]:
+        incoming: dict[str, list[dict]] = {}
+        for edge in edges:
+            if edge.get("revision") == "NEW" and edge.get("change") == "ADDED":
+                incoming.setdefault(str(edge["target_node_id"]), []).append(edge)
+        candidates = [
+            node for node in focus_nodes
+            if node.get("revision") == "NEW"
+            and node.get("change") == "ADDED"
+            and node.get("kind") in {"CONDITION", "RETURN", "THROW"}
+            and self._area(node) not in {"TEST", "GENERATED"}
+        ]
+        decisions: list[dict] = []
+        for node in candidates:
+            parent_edges = sorted(
+                incoming.get(str(node["node_id"]), []),
+                key=lambda edge: (edge["relation"], edge["source_node_id"], edge["edge_id"]),
+            )
+            parent = nodes[parent_edges[0]["source_node_id"]] if parent_edges else None
+            context = self._short_label(parent["label"]) if parent is not None else "变更流程"
+            relation = parent_edges[0]["relation"] if parent_edges else "BRANCHES_TO"
+            label = self._short_label(node["label"])
+            decisions.append({
+                "decision_id": f"decision:{hashlib.sha256(str(node['node_id']).encode('utf-8')).hexdigest()[:16]}",
+                "context": context,
+                "condition": label,
+                "statement_zh": f"{context} 新增“{label}”判断或退出点。",
+                "statement_en": f"{context} adds the decision or exit point: {label}.",
+                "relation": relation,
+                "confidence": node["provenance"]["confidence"],
+                "evidence_refs": [str(node["node_id"])] + [str(edge["edge_id"]) for edge in parent_edges[:1]],
+                "location": node["location"],
+            })
+            if len(decisions) == _MAX_DECISIONS:
+                break
+        return decisions
+
+    def _risk_cards(self, status: object, cards: Sequence[dict], analysis_digest: str) -> list[dict]:
+        areas = {str(card["area"]) for card in cards}
+        risks: list[dict] = []
+
+        def add(level: str, suffix: str, title_zh: str, title_en: str, description_zh: str, description_en: str) -> None:
+            risks.append({
+                "risk_id": f"risk:{suffix}", "level": level,
+                "title_zh": title_zh, "title_en": title_en,
+                "description_zh": description_zh, "description_en": description_en,
+                "evidence_refs": [analysis_digest],
+            })
+
+        if status == "PARTIAL":
+            add(
+                "HIGH", "partial", "编译上下文缺失", "Missing compile context",
+                "当前只覆盖变更 C# 文件；未变更依赖、define、metadata 与完整程序集边界尚未确认。",
+                "Only changed C# files are covered; unchanged dependencies, defines, metadata and full assembly boundaries remain unverified.",
+            )
+        if "SERVER" in areas and "CLIENT" in areas:
+            add(
+                "MEDIUM", "cross-runtime", "跨端行为需要联调", "Cross-runtime behavior needs integration testing",
+                "服务端与客户端同时变化，消息时序、资源绑定和实际表现需要在运行环境验证。",
+                "Server and client both changed; message timing, asset bindings and runtime behavior need integration validation.",
+            )
+        if "PROTOCOL" in areas:
+            add(
+                "MEDIUM", "protocol", "协议兼容需要验证", "Protocol compatibility needs validation",
+                "协议或消息结构发生变化，需要确认新旧数据读取和灰度兼容行为。",
+                "Protocol or message structures changed; old/new decoding and rollout compatibility need validation.",
+            )
+        if "CONFIGURATION" in areas:
+            add(
+                "MEDIUM", "configuration", "配置边界需要验证", "Configuration boundaries need validation",
+                "配置结构或校验发生变化，需要用真实导出数据覆盖缺失、越界和顺序异常。",
+                "Configuration or validation changed; real exported data should cover missing, out-of-range and ordering cases.",
+            )
+        return risks[:4]
+
+    def _story_views(
+        self,
+        *,
+        analysis: Mapping[str, object],
+        nodes: Mapping[str, dict],
+        edges: Sequence[dict],
+        mappings: Sequence[dict],
+        source_claims: Sequence[dict],
+    ) -> tuple[dict, dict]:
+        focus_nodes = self._focus_nodes(nodes, edges)
+        topic_tokens: set[str] = set()
+        for node in focus_nodes:
+            if (
+                node.get("revision") == "NEW"
+                and node.get("change") == "ADDED"
+                and node.get("kind") in {"METHOD", "TYPE"}
+                and self._area(node) not in {"TEST", "GENERATED"}
+            ):
+                topic_tokens.update(self._label_tokens(node["label"]))
+            if len(topic_tokens) >= 12:
+                break
+        if not topic_tokens:
+            for node in focus_nodes:
+                if node.get("revision") == "NEW" and node.get("kind") in {"METHOD", "TYPE"}:
+                    topic_tokens.update(self._label_tokens(node["label"]))
+                if len(topic_tokens) >= 8:
+                    break
+        cards = self._change_cards(focus_nodes, topic_tokens)
+        cards.extend(self._context_change_cards(
+            nodes, mappings, focus_nodes, {str(card["area"]) for card in cards}
+        ))
+        cards.sort(key=lambda card: _AREA_ORDER[str(card["area"])])
+        cards = cards[:_MAX_QUICK_CARDS]
+        representative = []
+        for node in focus_nodes:
+            if (
+                node.get("revision") != "NEW"
+                or node.get("change") != "ADDED"
+                or node.get("kind") not in {"METHOD", "TYPE"}
+                or self._area(node) in {"TEST", "GENERATED"}
+            ):
+                continue
+            label = self._headline_label(node["label"])
+            if label not in representative:
+                representative.append(label)
+            if len(representative) == 3:
+                break
+        if not representative:
+            for node in focus_nodes:
+                if node.get("revision") != "NEW" or node.get("kind") not in {"METHOD", "TYPE"}:
+                    continue
+                label = self._headline_label(node["label"])
+                if label not in representative:
+                    representative.append(label)
+                if len(representative) == 3:
+                    break
+        if not representative:
+            representative = ["当前代码路径"]
+        areas_zh = "、".join(card["title_zh"] for card in cards) or "代码结构"
+        primary_topic = "、".join(representative)
+        summary_zh = f"本次修改主要围绕 {primary_topic} 展开，影响 {areas_zh}。"
+        summary_en = f"The change centers on {', '.join(representative)} and affects {', '.join(card['title_en'] for card in cards) or 'code structure'}."
+        area_keys = {card["area"] for card in cards}
+        if {"CONFIGURATION", "SERVER", "CLIENT"}.issubset(area_keys):
+            analogy_zh = "帮助理解：像把一条固定执行路线改造成“配置剧本 → 服务端编排 → 客户端演出”的流水线。"
+            analogy_en = "Mental model: a fixed execution route becomes a configuration script, server orchestration and client presentation pipeline."
+        elif any(node.get("kind") == "CONDITION" for node in focus_nodes):
+            analogy_zh = "帮助理解：像在原有道路上增加新的岔路和安全护栏，让流程能选择、校验并在失败时退出。"
+            analogy_en = "Mental model: new junctions and guardrails are added to the existing road so the flow can choose, validate and stop safely."
+        else:
+            analogy_zh = "帮助理解：像保留原有骨架，同时替换和补充其中的关键零件。"
+            analogy_en = "Mental model: the original frame remains while key parts are replaced or added."
+        impact_summary_zh = f"直接影响 {areas_zh}；完整符号和关系仍保留在技术证据中。"
+        impact_summary_en = f"Directly affects {', '.join(card['title_en'] for card in cards)}; full symbols and relationships remain in technical evidence."
+        analysis_digest = _non_empty_string(analysis.get("canonical_digest"), "analysis digest")
+        quick_view = {
+            "summary_zh": summary_zh,
+            "summary_en": summary_en,
+            "analogy_zh": analogy_zh,
+            "analogy_en": analogy_en,
+            "primary_topic": primary_topic,
+            "change_cards": cards,
+            "old_flow": self._flow_steps("OLD", focus_nodes, topic_tokens),
+            "new_flow": self._flow_steps("NEW", focus_nodes, topic_tokens),
+            "impact_summary_zh": impact_summary_zh,
+            "impact_summary_en": impact_summary_en,
+            "risk_cards": self._risk_cards(analysis.get("status"), cards, analysis_digest),
+        }
+        source_note = (
+            "来源证据已提供；实现策略说明会将来源陈述与代码事实分开。"
+            if source_claims
+            else "未提供需求说明；以下内容是依据代码变化重建的工程实现结构，不是隐藏思维链。"
+        )
+        deep_dive = {
+            "method_note_zh": source_note,
+            "method_note_en": (
+                "Source evidence is available and remains separate from code facts."
+                if source_claims
+                else "No requirement statement was supplied; this is an evidence-backed reconstruction of the implementation structure, not hidden chain-of-thought."
+            ),
+            "strategy_summary_zh": (
+                f"修改按 {areas_zh} 分层展开；重点查看新增入口、关键分支、跨层数据和失败边界。"
+            ),
+            "strategy_summary_en": (
+                f"The change spans {', '.join(card['title_en'] for card in cards)}; focus on new entries, decisions, cross-layer data and failure boundaries."
+            ),
+            "stages": self._deep_stages(focus_nodes, nodes, edges),
+            "decision_points": self._decision_points(focus_nodes, nodes, edges),
+            "evidence_summary_zh": "每个阶段、步骤和决策点都保留节点、关系或源码位置引用；原始分析作为最终证据层。",
+            "evidence_summary_en": "Every stage, step and decision retains node, relationship or source-location references; the raw analysis remains the final evidence layer.",
+        }
+        return quick_view, deep_dive
+
     def _code_fact_claims(
         self, diff: Mapping[str, object], nodes: Mapping[str, dict], edges: Sequence[dict], mappings: Sequence[dict]
     ) -> list[dict]:
@@ -471,10 +1009,10 @@ class ChangeStoryBuilder:
 
 
 class HtmlChangeStoryRenderer:
-    """Render a self-contained, script-free Chinese-first HTML report."""
+    """Render a self-contained, script-free two-level Chinese-first report."""
 
     def render(self, story: Mapping[str, object], *, repository_root: str | os.PathLike[str] | None = None) -> str:
-        if story.get("schema_version") != "1.0.0" or story.get("language") != "zh-CN":
+        if story.get("schema_version") != "1.1.0" or story.get("language") != "zh-CN":
             raise ValueError("unsupported Change Story")
         repo = Path(repository_root).resolve() if repository_root is not None else None
         revisions = story.get("revisions")
@@ -487,13 +1025,14 @@ class HtmlChangeStoryRenderer:
         status = esc(story["status"])
         overview = story["overview"]
         counts = overview["counts"]
+        quick = story["quick_view"]
+        deep = story["deep_dive"]
         claims = story["claims"]
         facts = [item for item in claims if item["layer"] == "CODE_FACT"]
         sources = [item for item in claims if item["layer"] == "SOURCE_EVIDENCE"]
         inferences = [item for item in claims if item["layer"] == "INTENT_INFERENCE"]
 
-        def location(node: Mapping[str, object]) -> str:
-            item = node["location"]
+        def source_location(item: Mapping[str, object]) -> str:
             label = f"{item['path']}:{item['start_line']}"
             if repo is None or not new_is_worktree or item["revision_role"] != "NEW":
                 return f'<span class="location">{esc(label)}</span>'
@@ -504,6 +1043,89 @@ class HtmlChangeStoryRenderer:
                 return f'<span class="location">{esc(label)}</span>'
             return f'<a class="location" href="{esc(candidate.as_uri())}#L{item["start_line"]}">{esc(label)}</a>'
 
+        def location(node: Mapping[str, object]) -> str:
+            return source_location(node["location"])
+
+        def evidence_details(evidence_refs: Sequence[object], locations: Sequence[Mapping[str, object]] = ()) -> str:
+            links = "".join(source_location(item) for item in locations)
+            return (
+                '<details class="evidence"><summary>查看代码证据</summary>'
+                f'{links}<code>{esc(", ".join(str(item) for item in evidence_refs))}</code></details>'
+            )
+
+        def quick_cards() -> str:
+            if not quick["change_cards"]:
+                return '<p class="empty">没有可聚焦的业务变化。</p>'
+            return "".join(
+                f'<article class="change-card area-{esc(item["area"].lower())}">'
+                f'<div class="card-icon">{esc(item["icon"])}</div><div><h3>{esc(item["title_zh"])}</h3>'
+                f'<p>{esc(item["summary_zh"])}</p><small>{esc(item["title_en"])}</small>'
+                f'{evidence_details(item["evidence_refs"], item["locations"])}</div></article>'
+                for item in quick["change_cards"]
+            )
+
+        def flow_steps(items: Sequence[Mapping[str, object]], empty: str) -> str:
+            if not items:
+                return f'<p class="empty">{esc(empty)}</p>'
+            rendered = []
+            for index, item in enumerate(items):
+                if index:
+                    rendered.append('<div class="flow-arrow">↓</div>')
+                rendered.append(
+                    f'<article class="flow-step change-{esc(item["change"].lower())}">'
+                    f'<span class="step-number">{item["order"]}</span><div><small>{esc(item["area_label_zh"])}</small>'
+                    f'<strong>{esc(item["label"])}</strong>'
+                    f'<span>{esc(_CHANGE_ZH.get(item["change"], item["change"]))} · {esc(item["confidence"])}</span>'
+                    f'{source_location(item["location"])}</div></article>'
+                )
+            return "".join(rendered)
+
+        def risk_cards() -> str:
+            if not quick["risk_cards"]:
+                return '<p class="empty">没有自动提取到需要突出显示的风险。</p>'
+            return "".join(
+                f'<article class="risk risk-{esc(item["level"].lower())}"><span>{esc(item["level"])}</span>'
+                f'<div><strong>{esc(item["title_zh"])}</strong><p>{esc(item["description_zh"])}</p></div></article>'
+                for item in quick["risk_cards"]
+            )
+
+        def stages() -> str:
+            if not deep["stages"]:
+                return '<p class="empty">没有可拆解的实现阶段。</p>'
+            rendered = []
+            for stage in deep["stages"]:
+                items = "".join(
+                    f'<li><span class="badge change-{esc(item["change"].lower())}">'
+                    f'{esc(_CHANGE_ZH.get(item["change"], item["change"]))}</span> '
+                    f'<strong>{esc(item["label"])}</strong>{location(item)}</li>'
+                    for item in stage["items"]
+                )
+                relationships = "".join(
+                    f'<li><strong>{esc(item["source_label"])}</strong> '
+                    f'<span class="relation">—{esc(item["relation_zh"])}→</span> '
+                    f'<strong>{esc(item["target_label"])}</strong> '
+                    f'<small>{esc(item["confidence"])}</small></li>'
+                    for item in stage["relationships"]
+                ) or '<li class="empty">没有进入聚焦视图的直接关系；可在技术证据中继续查看。</li>'
+                rendered.append(
+                    f'<details class="stage" open><summary><span class="stage-number">{stage["order"]}</span>'
+                    f'<span class="stage-icon">{esc(stage["icon"])}</span><span><strong>{esc(stage["title_zh"])}</strong>'
+                    f'<small>{esc(stage["summary_zh"])}</small></span></summary>'
+                    f'<div class="stage-body"><div><h4>重点对象</h4><ul>{items}</ul></div>'
+                    f'<div><h4>关键关系</h4><ul>{relationships}</ul></div></div></details>'
+                )
+            return "".join(rendered)
+
+        def decisions() -> str:
+            if not deep["decision_points"]:
+                return '<p class="empty">没有提取到新增判断或退出点。</p>'
+            return "".join(
+                f'<article class="decision"><div class="decision-mark">◇</div><div>'
+                f'<strong>{esc(item["statement_zh"])}</strong><small>{esc(item["relation"])} · {esc(item["confidence"])}</small>'
+                f'{source_location(item["location"])}</div></article>'
+                for item in deep["decision_points"]
+            )
+
         def claim_cards(items: Sequence[Mapping[str, object]], empty: str) -> str:
             if not items:
                 return f'<p class="empty">{esc(empty)}</p>'
@@ -511,8 +1133,7 @@ class HtmlChangeStoryRenderer:
                 f'<article class="claim {esc(item["layer"].lower())}">'
                 f'<div class="claim-tag">{esc(item["layer"])} · {esc(item["confidence"])}</div>'
                 f'<p>{esc(item["statement_zh"])}</p><small>{esc(item["statement_en"])}</small>'
-                f'<details><summary>证据引用</summary><code>{esc(", ".join(item["evidence_refs"]))}</code></details>'
-                f'</article>' for item in items
+                f'{evidence_details(item["evidence_refs"])}</article>' for item in items
             )
 
         def chain_cards(lane: Mapping[str, object]) -> str:
@@ -543,9 +1164,7 @@ class HtmlChangeStoryRenderer:
                 return '<tr><td colspan="4" class="empty">没有符号级变化。</td></tr>'
             rows = []
             for item in story["changes"]:
-                locations = " → ".join(
-                    f"{entry['path']}:{entry['start_line']}" for entry in item["locations"]
-                )
+                locations = " → ".join(f"{entry['path']}:{entry['start_line']}" for entry in item["locations"])
                 rows.append(
                     f'<tr><td><span class="badge change-{esc(item["kind"].lower())}">'
                     f'{esc(_CHANGE_ZH.get(item["kind"], item["kind"]))}</span></td>'
@@ -567,41 +1186,52 @@ class HtmlChangeStoryRenderer:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(story["title"])}</title>
 <style>
-:root{{--bg:#f5f7fb;--panel:#fff;--ink:#172033;--muted:#667085;--line:#dfe4ec;--blue:#2563eb;--green:#16803c;--red:#c73535;--amber:#b36b00;--purple:#7657c5}}
-*{{box-sizing:border-box}} body{{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 system-ui,"Microsoft YaHei",sans-serif}}
-main{{max-width:1440px;margin:auto;padding:32px}} header{{background:linear-gradient(135deg,#172554,#1d4ed8);color:white;border-radius:18px;padding:30px;box-shadow:0 12px 35px #1d4ed833}}
-h1{{margin:0 0 8px;font-size:30px}} h2{{margin:34px 0 14px}} h3{{margin:0 0 12px}} .en{{opacity:.72;margin:0}} .digest{{word-break:break-all;opacity:.75;font-size:12px}}
-.status{{display:inline-block;padding:4px 10px;border-radius:999px;background:#ffffff22;border:1px solid #ffffff44}}
-.metrics{{display:grid;grid-template-columns:repeat(6,minmax(100px,1fr));gap:10px;margin:18px 0}}
-.metric,.panel,.claim,.chain{{background:var(--panel);border:1px solid var(--line);border-radius:12px}}
-.metric{{padding:14px}} .metric strong{{display:block;font-size:22px}} .metric span,small{{color:var(--muted)}}
-.layers,.lanes{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}} .layers{{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.panel{{padding:18px;min-width:0}} .claim{{padding:13px;margin:10px 0;border-left:4px solid var(--blue)}}
-.claim.source_evidence{{border-left-color:var(--purple)}} .claim.intent_inference{{border-left-color:var(--amber)}} .claim p{{margin:5px 0}} .claim-tag{{font-size:11px;letter-spacing:.04em;color:var(--muted)}}
-.chain{{padding:12px;margin:10px 0}} .chain-node{{padding:10px 12px;border-radius:9px;background:#f8fafc;border-left:4px solid #94a3b8;overflow-wrap:anywhere}}
-.chain-node span,.location{{display:block;color:var(--muted);font-size:12px}} .arrow{{padding:6px 18px;color:var(--blue)}} .arrow span:before{{content:"↓  "}} .arrow small{{display:block;margin-left:18px}}
+:root{{--bg:#f3f6fb;--panel:#fff;--ink:#172033;--muted:#667085;--line:#dce3ee;--blue:#2563eb;--blue-soft:#eaf1ff;--green:#16803c;--red:#c73535;--amber:#b36b00;--purple:#7657c5;--shadow:0 12px 35px #253b6b16}}
+*{{box-sizing:border-box}} body{{margin:0;background:radial-gradient(circle at 12% 0,#e7efff 0,transparent 32%),var(--bg);color:var(--ink);font:15px/1.65 system-ui,"Microsoft YaHei",sans-serif}}
+main{{max-width:1380px;margin:auto;padding:28px}} header{{background:linear-gradient(135deg,#111d47,#1d4ed8 68%,#4f70e8);color:white;border-radius:22px;padding:30px;box-shadow:0 18px 45px #1d4ed833}}
+h1{{margin:8px 0;font-size:30px}} h2{{margin:30px 0 13px}} h3{{margin:0 0 7px}} h4{{margin:0 0 8px}} p{{margin:7px 0}} small,.en{{color:var(--muted)}} header .en{{color:#dbe7ff}} .digest{{word-break:break-all;opacity:.72;font-size:11px}}
+.status{{display:inline-block;padding:4px 11px;border-radius:999px;background:#ffffff1f;border:1px solid #ffffff4a;font-weight:700}} .partial-note{{margin-top:16px;padding:11px 14px;border-radius:10px;background:#ffefc5;color:#724500}}
+.tab-input{{position:absolute;opacity:0;pointer-events:none}} .tab-nav{{display:flex;gap:8px;margin:20px 0 0;padding:6px;background:#e5eaf3;border-radius:14px;position:sticky;top:8px;z-index:5;box-shadow:var(--shadow)}}
+.tab-nav label{{flex:1;text-align:center;padding:12px;border-radius:10px;cursor:pointer;font-weight:700;color:var(--muted)}} #tab-quick:checked~.tab-nav label[for=tab-quick],#tab-deep:checked~.tab-nav label[for=tab-deep]{{background:white;color:var(--blue);box-shadow:0 4px 14px #26395c18}}
+.tab-panel{{display:none}} #tab-quick:checked~.quick-panel,#tab-deep:checked~.deep-panel{{display:block}} .hero-summary{{font-size:21px;font-weight:700;margin:24px 0 10px}} .analogy{{padding:16px 18px;border:1px dashed #8aa8ef;background:#f6f9ff;border-radius:13px;color:#25447f}}
+.cards{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}} .change-card{{display:flex;gap:11px;background:white;border:1px solid var(--line);border-top:4px solid var(--blue);border-radius:14px;padding:16px;box-shadow:var(--shadow);min-width:0}} .change-card>div:last-child{{min-width:0}} .card-icon{{font-size:25px}} .change-card p{{font-size:14px;overflow-wrap:anywhere}} .evidence summary{{cursor:pointer;color:var(--blue);font-size:12px}}
+.comparison,.two-columns,.layers,.lanes,.stage-body{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px}} .lane,.panel,.claim,.chain,.stage,.decision,.risk{{background:var(--panel);border:1px solid var(--line);border-radius:14px}} .lane,.panel{{padding:18px}} .lane-old{{border-top:5px solid #8a95a8}} .lane-new{{border-top:5px solid var(--blue)}}
+.flow-step{{display:flex;gap:11px;padding:12px;border:1px solid var(--line);border-left:4px solid #94a3b8;border-radius:10px;background:#fafcff}} .flow-step>div{{min-width:0}} .flow-step strong,.flow-step span,.location{{display:block}} .flow-step span,.location{{color:var(--muted);font-size:12px;overflow-wrap:anywhere}} .step-number,.stage-number{{display:grid!important;place-items:center;flex:0 0 25px;height:25px;border-radius:50%;background:var(--blue-soft);color:var(--blue)!important;font-weight:700}} .flow-arrow{{padding:2px 0 2px 11px;color:#7b8aa5}}
+.risk{{display:flex;gap:12px;padding:14px;margin:10px 0;border-left:5px solid var(--amber)}} .risk>span{{font-size:11px;font-weight:800;color:var(--amber)}} .risk-high{{border-left-color:var(--red)}} .risk-high>span{{color:var(--red)}}
+.method-note{{padding:15px 17px;border-left:5px solid var(--purple);background:#f6f2ff;border-radius:11px}} .stage{{margin:12px 0;overflow:hidden}} .stage>summary{{display:flex;align-items:center;gap:11px;padding:15px;cursor:pointer;background:#f8faff}} .stage>summary small{{display:block}} .stage-icon{{font-size:24px}} .stage-body{{padding:16px}} .stage-body ul{{padding-left:18px}} .stage-body li{{margin:7px 0;overflow-wrap:anywhere}} .relation{{color:var(--blue)}}
+.decision{{display:flex;gap:12px;padding:14px;margin:10px 0;border-left:4px solid var(--amber)}} .decision-mark{{font-size:23px;color:var(--amber)}} .decision small{{display:block}} .technical{{margin-top:24px;padding:16px;background:#eef2f7;border-radius:14px}} .technical>summary{{cursor:pointer;font-weight:800}}
+.metrics{{display:grid;grid-template-columns:repeat(6,minmax(90px,1fr));gap:9px;margin:16px 0}} .metric{{padding:12px;background:white;border:1px solid var(--line);border-radius:10px}} .metric strong{{display:block;font-size:20px}} .layers{{grid-template-columns:repeat(3,minmax(0,1fr))}} .claim{{padding:13px;margin:9px 0;border-left:4px solid var(--blue)}} .claim.source_evidence{{border-left-color:var(--purple)}} .claim.intent_inference{{border-left-color:var(--amber)}} .claim-tag{{font-size:11px;color:var(--muted)}}
+.chain{{padding:12px;margin:10px 0}} .chain-node{{padding:10px 12px;border-radius:9px;background:#f8fafc;border-left:4px solid #94a3b8;overflow-wrap:anywhere}} .chain-node span{{display:block;color:var(--muted);font-size:12px}} .arrow{{padding:6px 18px;color:var(--blue)}} .arrow span:before{{content:"↓  "}} .arrow small{{display:block;margin-left:18px}}
 .change-added{{border-color:var(--green)!important;color:var(--green)}} .change-removed{{border-color:var(--red)!important;color:var(--red)}} .change-updated{{border-color:var(--amber)!important;color:var(--amber)}} .change-moved,.change-renamed,.change-renamed_and_moved{{border-color:var(--blue)!important;color:var(--blue)}}
-table{{width:100%;border-collapse:collapse;background:white;border-radius:12px;overflow:hidden}} th,td{{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}} th{{background:#edf2f8}} code{{font-size:12px;word-break:break-all}} .badge{{display:inline-block;border:1px solid currentColor;border-radius:999px;padding:2px 8px;font-size:12px}} .empty{{color:var(--muted)}} details{{margin-top:7px}} footer{{margin:30px 0;color:var(--muted)}}
-@media(max-width:900px){{main{{padding:14px}}.metrics{{grid-template-columns:repeat(2,1fr)}}.layers,.lanes{{grid-template-columns:1fr}}}}
+table{{width:100%;border-collapse:collapse;background:white;border-radius:12px;overflow:hidden}} th,td{{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}} th{{background:#edf2f8}} code{{display:block;font-size:11px;word-break:break-all;color:#58647a}} .badge{{display:inline-block;border:1px solid currentColor;border-radius:999px;padding:2px 8px;font-size:11px}} .empty{{color:var(--muted)}} footer{{margin:30px 0;color:var(--muted)}}
+@media(max-width:1050px){{.cards{{grid-template-columns:repeat(2,1fr)}}}} @media(max-width:780px){{main{{padding:13px}}.cards,.comparison,.two-columns,.layers,.lanes,.stage-body{{grid-template-columns:1fr}}.metrics{{grid-template-columns:repeat(2,1fr)}}.tab-nav{{position:static}}}}
 </style></head><body><main data-story-digest="{esc(story["canonical_digest"])}">
 <header><span class="status">{status}</span><h1>{esc(story["title"])}</h1>
-<p>{esc(overview["headline_zh"])}</p><p class="en">{esc(overview["headline_en"])}</p>
+<p>{esc(quick["summary_zh"])}</p><p class="en">{esc(quick["summary_en"])}</p>
+{('<div class="partial-note">PARTIAL：当前结论仅覆盖变更 C# 文件，所有关系最高为结构级证据。</div>' if story["status"] == "PARTIAL" else '')}
 <p class="digest">Analysis {esc(story["analysis_digest"])} · Story {esc(story["canonical_digest"])}</p></header>
-<section class="metrics">
-<div class="metric"><strong>{counts["added_nodes"]}</strong><span>新增节点</span></div><div class="metric"><strong>{counts["removed_nodes"]}</strong><span>删除节点</span></div>
-<div class="metric"><strong>{counts["updated_node_pairs"]}</strong><span>修改节点对</span></div><div class="metric"><strong>{counts["moved_node_pairs"]}</strong><span>移动节点对</span></div>
-<div class="metric"><strong>{counts["added_edges"]}</strong><span>新增关系</span></div><div class="metric"><strong>{counts["removed_edges"]}</strong><span>删除关系</span></div></section>
-<h2>修改依据 <small>事实、来源和推断严格分层</small></h2><section class="layers">
-<div class="panel"><h3>代码事实</h3>{claim_cards(facts,"没有可展示的代码事实。")}</div>
-<div class="panel"><h3>来源证据</h3>{claim_cards(sources,"未提供用户需求、AI 计划或提交说明。")}</div>
-<div class="panel"><h3>意图推断</h3>{claim_cards(inferences,"没有足够代码模式支持意图推断。")}</div></section>
-<h2>原链路 → 新链路</h2><section class="lanes">
-<div class="panel old-lane"><h3>原链路 <small>Old path</small></h3>{chain_cards(story["lanes"]["old"])}</div>
-<div class="panel new-lane"><h3>新链路 <small>New path</small></h3>{chain_cards(story["lanes"]["new"])}</div></section>
+<input class="tab-input" type="radio" name="story-tab" id="tab-quick" checked><input class="tab-input" type="radio" name="story-tab" id="tab-deep">
+<nav class="tab-nav"><label for="tab-quick">⚡ 快速理解 <small>30–60 秒</small></label><label for="tab-deep">🧭 详细思路拆解 <small>按证据重建</small></label></nav>
+<section class="tab-panel quick-panel">
+<p class="hero-summary">{esc(quick["summary_zh"])}</p><div class="analogy">{esc(quick["analogy_zh"])}</div>
+<h2>到底改了什么</h2><section class="cards">{quick_cards()}</section>
+<h2>原来怎样 → 现在怎样</h2><section class="comparison"><div class="lane lane-old"><h3>原链路 <small>OLD</small></h3>{flow_steps(quick["old_flow"],"原版本没有进入业务聚焦层的显著步骤。")}</div>
+<div class="lane lane-new"><h3>新链路 <small>NEW</small></h3>{flow_steps(quick["new_flow"],"新版本没有进入业务聚焦层的显著步骤。")}</div></section>
+<section class="two-columns"><div><h2>影响范围</h2><div class="panel"><p>{esc(quick["impact_summary_zh"])}</p></div></div><div><h2>优先关注</h2>{risk_cards()}</div></section>
+</section>
+<section class="tab-panel deep-panel">
+<p class="hero-summary">{esc(deep["strategy_summary_zh"])}</p><div class="method-note">{esc(deep["method_note_zh"])}</div>
+<h2>修改如何分层展开</h2>{stages()}
+<h2>新增决策与退出点</h2><section class="two-columns">{decisions()}</section>
+<div class="panel"><strong>证据说明</strong><p>{esc(deep["evidence_summary_zh"])}</p></div>
+<details class="technical"><summary>展开完整技术证据（符号、关系、限制）</summary>
+<section class="metrics"><div class="metric"><strong>{counts["added_nodes"]}</strong><span>新增节点</span></div><div class="metric"><strong>{counts["removed_nodes"]}</strong><span>删除节点</span></div><div class="metric"><strong>{counts["updated_node_pairs"]}</strong><span>修改节点对</span></div><div class="metric"><strong>{counts["moved_node_pairs"]}</strong><span>移动节点对</span></div><div class="metric"><strong>{counts["added_edges"]}</strong><span>新增关系</span></div><div class="metric"><strong>{counts["removed_edges"]}</strong><span>删除关系</span></div></section>
+<h2>修改依据</h2><section class="layers"><div class="panel"><h3>代码事实</h3>{claim_cards(facts,"没有可展示的代码事实。")}</div><div class="panel"><h3>来源证据</h3>{claim_cards(sources,"未提供用户需求、AI 计划或提交说明。")}</div><div class="panel"><h3>意图推断</h3>{claim_cards(inferences,"没有足够代码模式支持意图推断。")}</div></section>
+<h2>完整原链路 → 新链路</h2><section class="lanes"><div class="panel"><h3>原链路</h3>{chain_cards(story["lanes"]["old"])}</div><div class="panel"><h3>新链路</h3>{chain_cards(story["lanes"]["new"])}</div></section>
 <h2>符号变化</h2><table><thead><tr><th>类型</th><th>对象</th><th>置信度</th><th>代码位置</th></tr></thead><tbody>{change_rows()}</tbody></table>
-<section class="lanes"><div><h2>影响范围</h2><div class="panel"><ul>{impacts}</ul></div></div>
-<div><h2>限制与未知项</h2><div class="panel"><ul>{limitations}</ul></div></div></section>
-<footer>AEH Change Lens · 中文优先离线报告 · 不执行目标项目代码 · 不声称还原隐藏思维链</footer>
+<section class="lanes"><div><h2>直接影响</h2><div class="panel"><ul>{impacts}</ul></div></div><div><h2>限制与未知项</h2><div class="panel"><ul>{limitations}</ul></div></div></section>
+</details></section>
+<footer>AEH Change Lens · 中文优先离线报告 · 快速理解 + 详细思路拆解 · 不执行目标项目代码 · 不声称还原隐藏思维链</footer>
 </main></body></html>'''
 
 

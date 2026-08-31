@@ -10,9 +10,8 @@
 AEH Change Lens 是面向 Unity/C# 游戏业务代码的只读修改解释工具。它把一次代码修改整理为：
 
 ```text
-原逻辑链路 → 结构化变化 → 新逻辑链路
-                  │
-                  └─ 代码事实、来源证据、意图推断、影响与未知项
+完整分析 → 业务聚焦与降噪 → 快速理解（默认）
+                         └→ 详细思路拆解 → 技术证据
 ```
 
 它不会读取或还原模型隐藏思维链，只展示能够被 Git、Roslyn、用户提供的任务说明和明确标注的推断所支持的结论。
@@ -25,7 +24,8 @@ AEH Change Lens 是面向 Unity/C# 游戏业务代码的只读修改解释工具
 - 对比 Git `OLD` revision 与 `NEW` revision/工作树，全程不 checkout。
 - 使用 Roslyn 提取调用、分支、异常、状态读写、生命周期、协程、异步、事件和常见 Unity 关系。
 - 输出确定性的新增、删除、修改、移动和上下文关系。
-- 生成中文优先、无脚本、完全离线的 Change Story HTML。
+- 生成中文优先、无脚本、完全离线的双层 Change Story HTML：默认快速理解，按需展开详细思路拆解。
+- 将生成代码、测试代码和语法碎片从首页降权，按配置、服务端、协议、客户端和测试组织业务变化。
 - 严格分开 `CODE_FACT`、`SOURCE_EVIDENCE` 和 `INTENT_INFERENCE`。
 - 对缺失、过期、越界或无法证明的输入 fail closed 或显式降级为 `PARTIAL`。
 - 提供显式触发的 `$aeh-change-lens` Codex Skill，隐藏日常 CLI 参数。
@@ -73,6 +73,7 @@ change-lens explain D:\GameRepo Unity `
   --target WORKTREE `
   --request-id CHANGE-001 `
   --analysis-output change-analysis.json `
+  --story-output change-story.json `
   --output change-story.html `
   --pretty
 ```
@@ -86,6 +87,7 @@ change-lens explain D:\GameRepo Unity `
   --target WORKTREE `
   --request-id CHANGE-001 `
   --analysis-output change-analysis.json `
+  --story-output change-story.json `
   --output change-story.html `
   --allow-syntax-partial `
   --progress `
@@ -118,12 +120,10 @@ change-lens export-compile-manifest D:\GameRepo Unity `
 
 Change Story 报告包含：
 
-1. 修改摘要与变化计数；
-2. 代码事实、来源证据和意图推断；
-3. 原链路与新链路；
-4. 符号变化与代码位置；
-5. 状态、事件、类型和动态目标影响；
-6. `PARTIAL` 原因及其他限制。
+1. **快速理解**：一句话结论、业务比喻、变化卡片、OLD/NEW 重点流程、影响和优先风险；
+2. **详细思路拆解**：按业务层组织的实现阶段、新增决策点和代码证据；
+3. **完整技术证据**：事实/来源/推断分层、原始链路、符号变化、影响和限制，默认折叠；
+4. 可选 `change-story.json`，供 Codex 无需遍历完整 analysis 即可读取聚焦结果。
 
 HTML 是 UTF-8 单文件，不包含 JavaScript、CDN、远程字体或遥测。
 

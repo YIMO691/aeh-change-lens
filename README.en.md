@@ -7,7 +7,7 @@
 
 [中文](README.md) | English | [Documentation index](docs/README.md)
 
-AEH Change Lens is a read-only change-explanation tool for Unity/C# gameplay code. It presents an evidence-linked transition from the old logic path to the new logic path, including code facts, supplied source statements, clearly labeled intent hypotheses, impacts, and unknowns.
+AEH Change Lens is a read-only change-explanation tool for Unity/C# gameplay code. It turns the full OLD/NEW analysis into two evidence-linked levels: a quick understanding view by default and a detailed implementation breakdown on demand.
 
 It does not read or reconstruct hidden model chain of thought.
 
@@ -19,7 +19,8 @@ It does not read or reconstruct hidden model chain of thought.
 - Compare an OLD Git revision with a NEW revision or worktree without checkout.
 - Extract calls, branches, exceptions, state access, lifecycle, coroutine, async, event, and common Unity relationships with Roslyn.
 - Produce deterministic added, removed, updated, moved, and context relationships.
-- Generate a self-contained, script-free, Chinese-first Change Story HTML report.
+- Generate a self-contained, script-free, Chinese-first Change Story HTML with quick and detailed views.
+- De-emphasize generated code, tests, and syntax fragments on the landing view, then organize changes by configuration, server, protocol, client, and tests.
 - Keep `CODE_FACT`, `SOURCE_EVIDENCE`, and `INTENT_INFERENCE` separate.
 - Fail closed or become explicitly `PARTIAL` when evidence is missing, stale, escaped, or unsupported.
 - Offer an explicit-only `$aeh-change-lens` Codex Skill for the personal workflow.
@@ -56,6 +57,7 @@ change-lens explain D:\GameRepo Unity `
   --target WORKTREE `
   --request-id CHANGE-001 `
   --analysis-output change-analysis.json `
+  --story-output change-story.json `
   --output change-story.html `
   --pretty
 ```
@@ -69,6 +71,7 @@ change-lens explain D:\GameRepo Unity `
   --target WORKTREE `
   --request-id CHANGE-001 `
   --analysis-output change-analysis.json `
+  --story-output change-story.json `
   --output change-story.html `
   --allow-syntax-partial `
   --progress `

@@ -257,3 +257,33 @@ This fallback improves immediate comprehension when historical manifests do
 not exist; it does not retroactively create revision-bound semantic evidence.
 Future strict analysis still requires compile manifests captured for both
 revisions before the change is evaluated.
+
+## 2026-08-31 usability increment: two-level Change Story
+
+This is additional progress evidence only. It does not close `CL-GATE-02` or
+promote business-focus heuristics to compile-confirmed semantics.
+
+- Change Story contract `1.1.0` adds a bounded quick-understanding model and a
+  detailed, evidence-backed implementation breakdown;
+- the default landing view contains one summary, an explicitly labeled mental
+  model, at most five business-area cards, at most eight OLD/NEW focus steps,
+  impact scope and bounded priority risks;
+- detailed mode groups representative objects and relationships by
+  configuration, server, protocol, client, runtime and tests, then exposes new
+  decision/exit points before the complete technical evidence;
+- generated code, tests, unchanged context and syntax fragments remain in the
+  full evidence but cannot displace the primary business flow;
+- `--story-output` writes the focused contract for Codex, and the explicit Skill
+  now reads it before the full analysis JSON.
+
+The complete local suite passed 94 tests with 4 platform-dependent skips. The
+.NET Worker built with 0 warnings and 0 errors, the updated Skill passed its
+validator, and the final HTML remained script-free with no remote resources.
+
+A read-only Ares2 ET6 pilot bound 20 changed C# paths and produced a `PARTIAL`
+two-level story outside the target repository. The quick layer reduced the
+current gameplay change to five area cards, four OLD focus steps and eight NEW
+focus steps. Target Git-status hashes were identical before and after
+(`74267bae547e935dccd81a0ccbe2b75befc1cf850eeb6453f584ea2a564e9f23`).
+The report remains structurally honest: missing compile context is prominent,
+and the focused path is not described as a complete runtime call stack.

@@ -7,14 +7,18 @@
 Change Story 将已有的、证据绑定的 OLD/NEW Roslyn 图差异转换为一个可离线打开的单文件 HTML：
 
 ```text
-用户目标 / AI 计划（可选来源）
-                 |
-代码事实 ----> 原链路 -> 结构化变化 -> 新链路
-                 |                       |
-                 +-> 意图推断            +-> 影响与未知项
+完整 OLD/NEW 分析
+        |
+业务聚焦、主题相关性与生成代码降噪
+        |----------------------|
+        v                      v
+快速理解（默认）          详细思路拆解
+        \______________________/
+                   |
+             完整技术证据
 ```
 
-报告用于回答五个问题：原来怎么运行、现在怎么运行、改变了什么、可能为什么改变、哪些结论仍不确定。它不读取或还原模型隐藏思维链。
+报告用于回答五个问题：到底改了什么、原来怎样、现在怎样、为什么可能这样实现、哪些结论仍不确定。详细拆解是依据代码证据重建的工程实现结构，不是模型隐藏思维链。
 
 ## 一键生成
 
@@ -26,6 +30,7 @@ change-lens explain D:\GameRepo Unity `
   --request-id CHANGE-001 `
   --intent-evidence intent-evidence.json `
   --analysis-output change-analysis.json `
+  --story-output change-story.json `
   --output change-story.html `
   --pretty
 ```
@@ -37,7 +42,8 @@ change-lens explain D:\GameRepo Unity `
 ```powershell
 change-lens render-report change-analysis.json `
   --intent-evidence intent-evidence.json `
-  --source-root D:\GameRepo\Unity `
+  --source-root D:\GameRepo `
+  --story-output change-story.json `
   --output change-story.html `
   --pretty
 ```
@@ -52,7 +58,7 @@ change-lens render-report change-analysis.json `
 
 此时报告固定标记为 `PARTIAL`，只包含仓库内已变更 C# 文件的 Roslyn syntax/局部符号子图。它不会使用当前工作树的编译选项解释 OLD，也不会把结构调用、跨程序集或 Unity 动态关系标成完整静态事实。
 
-`--source-root` 只用于为 NEW 工作树位置生成本地文件链接。OLD 位置保持为 revision/path/line 文本；当 NEW 也是不可变 Git revision 时也不生成本地链接，避免把当前工作树文件冒充历史源码。
+`--source-root` 指向 Git 仓库根目录，只用于为 NEW 工作树位置生成本地文件链接。OLD 位置保持为 revision/path/line 文本；当 NEW 也是不可变 Git revision 时也不生成本地链接，避免把当前工作树文件冒充历史源码。
 
 ## 来源证据
 
@@ -83,14 +89,35 @@ change-lens render-report change-analysis.json `
 
 没有来源证据时，报告明确显示“未提供”，不会生成伪造的 AI 计划。所有意图推断都使用“可能”，置信度为 `INFERRED`，并关联触发该推断的 edge 或 mapping ID。
 
-## 链路聚焦
+## 双层阅读模式
+
+### 快速理解
+
+默认页控制在一屏到数屏内，优先展示：
+
+- 一句话结论和明确标注的帮助理解比喻；
+- 最多 5 张业务变化卡片；
+- OLD/NEW 各最多 8 个重点步骤；
+- 影响范围和最多 4 个优先风险。
+
+方法参数、重复条件、生成代码数量和完整关系不会占据首页。快速流程是按主题相关性与业务层组织的“重点流程”，不是声称完整运行时调用栈。
+
+### 详细思路拆解
+
+详细页按配置、服务端、协议、客户端、运行逻辑和测试阶段组织代表对象、关键关系与新增决策点。每一项保留源码位置或节点/关系证据。完整事实层、原始链路、符号表和全部限制继续保留，但默认折叠。
+
+可选 `--story-output` 保存同一份聚焦后的 `change-story.json`。Codex 应优先读取它，而不是遍历体积更大的 `change-analysis.json`。
+
+## 聚焦与降噪
 
 每个版本只选择以下关系进入用户可见链路：
 
 - 关系本身新增或删除；或
 - 关系连接了新增、删除、修改、移动的节点。
 
-完全不变且不连接变化节点的背景关系不会占满报告。每个 lane 最多展示 80 条聚焦关系、16 条链、每条链 8 个 hop；发生截断时会写入限制项，完整分析仍可通过 `--analysis-output` 保存。
+完全不变且不连接变化节点的背景关系不会占满报告。快速层进一步按照变化类型、业务入口、主题词重合和跨层作用加权；普通生成代码和测试代码不会抢占主业务流程。协议字段未形成独立 Roslyn 节点时，只能用文件内容变化上下文提示，不会伪造字段级语义。
+
+技术证据中的每个 lane 仍最多展示 80 条聚焦关系、16 条链、每条链 8 个 hop；发生截断时会写入限制项，完整分析仍可通过 `--analysis-output` 保存。
 
 ## 报告安全与可移植性
 
@@ -106,5 +133,5 @@ change-lens render-report change-analysis.json `
 - 链路是“变化节点加受限关系”的解释视图，不是完整运行时调用栈或完整 CFG；
 - 仅凭代码不能证明 AI 的真实修改意图；
 - 多入口、大型分叉图会被确定性截断并披露；
-- 当前 Viewer 是静态 HTML，尚无筛选、缩放、搜索或 IDE 插件；
+- 当前 Viewer 使用无脚本双页签与折叠面板，尚无搜索、缩放或 IDE 插件；
 - Golden Change 仍为 1 套，未达到 `CL-GATE-02` 计划的 10–20 套。

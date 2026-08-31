@@ -164,12 +164,20 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertTrue(first["lanes"]["new"]["chains"])
         self.assertTrue(any(item["kind"] == "RENAMED" for item in first["changes"]))
         self.assertTrue(any(item["kind"] == "STATE" for item in first["impacts"]))
+        self.assertLessEqual(len(first["quick_view"]["change_cards"]), 5)
+        self.assertLessEqual(len(first["quick_view"]["old_flow"]), 8)
+        self.assertLessEqual(len(first["quick_view"]["new_flow"]), 8)
+        self.assertTrue(first["quick_view"]["old_flow"])
+        self.assertTrue(first["quick_view"]["new_flow"])
+        self.assertTrue(first["deep_dive"]["stages"])
+        self.assertIn("来源证据", first["deep_dive"]["method_note_zh"])
 
     def test_absent_source_evidence_is_disclosed_not_invented(self) -> None:
         story = ChangeStoryBuilder().build(analysis())
 
         self.assertFalse(any(item["layer"] == "SOURCE_EVIDENCE" for item in story["claims"]))
         self.assertTrue(any("未提供用户需求" in item for item in story["limitations"]))
+        self.assertIn("不是隐藏思维链", story["deep_dive"]["method_note_zh"])
         self.assertTrue(all(
             "可能" in item["statement_zh"]
             for item in story["claims"] if item["layer"] == "INTENT_INFERENCE"
@@ -183,9 +191,34 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertIn("新链路", rendered)
         self.assertIn("CODE_FACT", rendered)
         self.assertIn("INTENT_INFERENCE", rendered)
+        self.assertIn("快速理解", rendered)
+        self.assertIn("详细思路拆解", rendered)
+        self.assertIn('id="tab-quick" checked', rendered)
+        self.assertIn("到底改了什么", rendered)
         self.assertIn("奖励 &lt;script&gt;alert(1)&lt;/script&gt;", rendered)
         self.assertNotIn("<script", rendered.lower())
         self.assertNotIn("https://", rendered)
+
+    def test_generated_noise_stays_in_technical_evidence_not_quick_view(self) -> None:
+        payload = copy.deepcopy(analysis())
+        for index in range(30):
+            generated = _node(
+                "NEW", f"generated-{index:02d}", "TYPE", f"Generated.Payload{index}",
+                100 + index, "ADDED",
+            )
+            generated["location"]["path"] = "Server/Model/Generate/Payloads.cs"
+            payload["diff"]["nodes"].append(generated)
+        payload["diff"]["summary"]["new_nodes"] += 30
+        payload["diff"]["summary"]["added_nodes"] += 30
+
+        story = ChangeStoryBuilder().build(payload)
+
+        self.assertNotIn("GENERATED", {item["area"] for item in story["quick_view"]["change_cards"]})
+        self.assertFalse(any(
+            "Generated.Payload" in item["label"]
+            for item in story["quick_view"]["new_flow"]
+        ))
+        self.assertTrue(any("Generated.Payload" in item["subject_zh"] for item in story["changes"]))
 
     def test_only_new_worktree_locations_receive_local_links(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -232,6 +265,7 @@ class ChangeStoryTests(unittest.TestCase):
             root = Path(temporary)
             analysis_path = root / "analysis.json"
             output_path = root / "report.html"
+            story_path = root / "story.json"
             evidence_path = root / "intent.json"
             analysis_path.write_text(json.dumps(analysis()), encoding="utf-8")
             evidence_path.write_text(json.dumps({
@@ -242,17 +276,21 @@ class ChangeStoryTests(unittest.TestCase):
             with redirect_stdout(stdout):
                 exit_code = main([
                     "render-report", str(analysis_path), "--output", str(output_path),
+                    "--story-output", str(story_path),
                     "--intent-evidence", str(evidence_path), "--pretty",
                 ])
 
             result = json.loads(stdout.getvalue())
             rendered = output_path.read_text(encoding="utf-8")
+            story_payload = json.loads(story_path.read_text(encoding="utf-8"))
 
         self.assertEqual(0, exit_code)
         self.assertEqual("PARTIAL", result["status"])
         self.assertEqual(64, len(result["story_digest"]))
         self.assertIn("阻止无效奖励", rendered)
         self.assertIn('data-story-digest=', rendered)
+        self.assertEqual(str(story_path.resolve()), result["story_path"])
+        validate("change-story.schema.json", story_payload)
 
     def test_invalid_or_empty_intent_evidence_fails_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "unsupported intent evidence fields"):

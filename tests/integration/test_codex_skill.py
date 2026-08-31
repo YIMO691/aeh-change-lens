@@ -25,11 +25,16 @@ class CodexSkillIntegrationTests(unittest.TestCase):
         self.assertIn("$aeh-change-lens", metadata["interface"]["default_prompt"])
         self.assertIn("Never run `export-compile-manifest`", instructions)
         self.assertIn("--allow-syntax-partial", instructions)
+        self.assertIn("quick understanding", instructions)
+        self.assertIn("change-story.json", instructions)
 
         workflow = (SKILL / "references/workflow.md").read_text(encoding="utf-8")
         self.assertIn("D:\\ares2\\project\\ET6", workflow)
         self.assertIn("--allow-syntax-partial", workflow)
         self.assertIn("--progress", workflow)
+        self.assertIn("--story-output", workflow)
+        self.assertIn("quick_view.summary_zh", workflow)
+        self.assertIn("deep_dive.stages", workflow)
 
     def test_source_checkout_runner_needs_no_package_install(self) -> None:
         completed = subprocess.run(
@@ -42,7 +47,7 @@ class CodexSkillIntegrationTests(unittest.TestCase):
 
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertIn("explain", completed.stdout)
-        self.assertIn("生成中文 Change Story HTML 报告", completed.stdout)
+        self.assertIn("生成快速理解/详细拆解 Change Story", completed.stdout)
 
 
 if __name__ == "__main__":

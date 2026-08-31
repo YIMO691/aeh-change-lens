@@ -6,11 +6,11 @@
   "additionalProperties": false,
   "required": [
     "schema_version", "story_id", "language", "status", "title",
-    "analysis_digest", "revisions", "overview", "lanes", "changes",
+    "analysis_digest", "revisions", "overview", "quick_view", "deep_dive", "lanes", "changes",
     "claims", "impacts", "limitations", "canonical_digest"
   ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
     "story_id": { "type": "string", "pattern": "^story:[a-f0-9]{24}$" },
     "language": { "const": "zh-CN" },
     "status": { "enum": ["FRESH", "PARTIAL"] },
@@ -33,6 +33,8 @@
         "counts": { "$ref": "#/$defs/counts" }
       }
     },
+    "quick_view": { "$ref": "#/$defs/quick_view" },
+    "deep_dive": { "$ref": "#/$defs/deep_dive" },
     "lanes": {
       "type": "object", "additionalProperties": false,
       "required": ["old", "new"],
@@ -51,6 +53,154 @@
     "canonical_digest": { "$ref": "common.schema.json#/$defs/sha256" }
   },
   "$defs": {
+    "change_card": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "card_id", "area", "icon", "title_zh", "title_en", "summary_zh",
+        "summary_en", "evidence_refs", "locations"
+      ],
+      "properties": {
+        "card_id": { "type": "string", "pattern": "^card:[a-z-]+$" },
+        "area": { "$ref": "#/$defs/area" },
+        "icon": { "type": "string", "minLength": 1 },
+        "title_zh": { "type": "string", "minLength": 1 },
+        "title_en": { "type": "string", "minLength": 1 },
+        "summary_zh": { "type": "string", "minLength": 1 },
+        "summary_en": { "type": "string", "minLength": 1 },
+        "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "locations": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/source_location" } }
+      }
+    },
+    "flow_step": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "step_id", "order", "area", "area_label_zh", "area_label_en", "label",
+        "kind", "change", "confidence", "evidence_refs", "location"
+      ],
+      "properties": {
+        "step_id": { "type": "string", "pattern": "^flow:[a-f0-9]{16}$" },
+        "order": { "type": "integer", "minimum": 1 },
+        "area": { "$ref": "#/$defs/area" },
+        "area_label_zh": { "type": "string", "minLength": 1 },
+        "area_label_en": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "change": { "$ref": "common.schema.json#/$defs/change_kind" },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" },
+        "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "location": { "$ref": "common.schema.json#/$defs/source_location" }
+      }
+    },
+    "risk_card": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "risk_id", "level", "title_zh", "title_en", "description_zh",
+        "description_en", "evidence_refs"
+      ],
+      "properties": {
+        "risk_id": { "type": "string", "pattern": "^risk:[a-z-]+$" },
+        "level": { "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "title_zh": { "type": "string", "minLength": 1 },
+        "title_en": { "type": "string", "minLength": 1 },
+        "description_zh": { "type": "string", "minLength": 1 },
+        "description_en": { "type": "string", "minLength": 1 },
+        "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "quick_view": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "summary_zh", "summary_en", "analogy_zh", "analogy_en", "primary_topic",
+        "change_cards", "old_flow", "new_flow", "impact_summary_zh", "impact_summary_en",
+        "risk_cards"
+      ],
+      "properties": {
+        "summary_zh": { "type": "string", "minLength": 1 },
+        "summary_en": { "type": "string", "minLength": 1 },
+        "analogy_zh": { "type": "string", "minLength": 1 },
+        "analogy_en": { "type": "string", "minLength": 1 },
+        "primary_topic": { "type": "string", "minLength": 1 },
+        "change_cards": { "type": "array", "maxItems": 5, "items": { "$ref": "#/$defs/change_card" } },
+        "old_flow": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/flow_step" } },
+        "new_flow": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/flow_step" } },
+        "impact_summary_zh": { "type": "string", "minLength": 1 },
+        "impact_summary_en": { "type": "string", "minLength": 1 },
+        "risk_cards": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/risk_card" } }
+      }
+    },
+    "stage_relationship": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "edge_id", "source_label", "target_label", "relation", "relation_zh",
+        "change", "confidence"
+      ],
+      "properties": {
+        "edge_id": { "type": "string", "minLength": 1 },
+        "source_label": { "type": "string", "minLength": 1 },
+        "target_label": { "type": "string", "minLength": 1 },
+        "relation": { "type": "string", "minLength": 1 },
+        "relation_zh": { "type": "string", "minLength": 1 },
+        "change": { "$ref": "common.schema.json#/$defs/change_kind" },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" }
+      }
+    },
+    "stage": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "stage_id", "order", "area", "icon", "title_zh", "title_en", "summary_zh",
+        "summary_en", "items", "relationships"
+      ],
+      "properties": {
+        "stage_id": { "type": "string", "pattern": "^stage:[a-z-]+$" },
+        "order": { "type": "integer", "minimum": 1 },
+        "area": { "$ref": "#/$defs/area" },
+        "icon": { "type": "string", "minLength": 1 },
+        "title_zh": { "type": "string", "minLength": 1 },
+        "title_en": { "type": "string", "minLength": 1 },
+        "summary_zh": { "type": "string", "minLength": 1 },
+        "summary_en": { "type": "string", "minLength": 1 },
+        "items": { "type": "array", "minItems": 1, "maxItems": 6, "items": { "$ref": "#/$defs/story_node" } },
+        "relationships": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/stage_relationship" } }
+      }
+    },
+    "decision_point": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "decision_id", "context", "condition", "statement_zh", "statement_en",
+        "relation", "confidence", "evidence_refs", "location"
+      ],
+      "properties": {
+        "decision_id": { "type": "string", "pattern": "^decision:[a-f0-9]{16}$" },
+        "context": { "type": "string", "minLength": 1 },
+        "condition": { "type": "string", "minLength": 1 },
+        "statement_zh": { "type": "string", "minLength": 1 },
+        "statement_en": { "type": "string", "minLength": 1 },
+        "relation": { "type": "string", "minLength": 1 },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" },
+        "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "location": { "$ref": "common.schema.json#/$defs/source_location" }
+      }
+    },
+    "deep_dive": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "method_note_zh", "method_note_en", "strategy_summary_zh", "strategy_summary_en",
+        "stages", "decision_points", "evidence_summary_zh", "evidence_summary_en"
+      ],
+      "properties": {
+        "method_note_zh": { "type": "string", "minLength": 1 },
+        "method_note_en": { "type": "string", "minLength": 1 },
+        "strategy_summary_zh": { "type": "string", "minLength": 1 },
+        "strategy_summary_en": { "type": "string", "minLength": 1 },
+        "stages": { "type": "array", "items": { "$ref": "#/$defs/stage" } },
+        "decision_points": { "type": "array", "maxItems": 6, "items": { "$ref": "#/$defs/decision_point" } },
+        "evidence_summary_zh": { "type": "string", "minLength": 1 },
+        "evidence_summary_en": { "type": "string", "minLength": 1 }
+      }
+    },
+    "area": {
+      "enum": ["CONFIGURATION", "SERVER", "PROTOCOL", "CLIENT", "RUNTIME", "TEST", "GENERATED"]
+    },
     "counts": {
       "type": "object", "additionalProperties": false,
       "required": [

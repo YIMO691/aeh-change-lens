@@ -31,7 +31,8 @@
 | Golden Change | 部分实现 | 人工标注 + 确定性摘要 | 当前 1 套，目标 10–20 套 |
 | 可提交 compile manifest | 已实现 | snapshot-bound | 需在基线和源码变化后导出；不追溯猜测旧提交 |
 | 历史 Git 双上下文分析 | 部分实现 | snapshot-bound | 每侧需有生成 csproj 或匹配源码的清单；引用缺失时 `PARTIAL` |
-| Change Story 中文 HTML | 首个纵切已实现 | 分层继承原证据置信度 | 单文件、无脚本、离线；大型图会确定性截断并披露 |
+| Change Story 双层 HTML | 已实现 | 分层继承原证据置信度 | 单文件、无脚本、离线；默认快速理解，详细拆解和技术证据按需展开 |
+| 业务聚焦与降噪 | 部分实现 | `STRUCTURAL` | 按路径、变化、主题相关性聚类；生成代码与测试降权，不声称得到完整运行时主链 |
 | AI 修改原因说明 | 部分实现 | `SOURCE_EVIDENCE` / `INFERRED` | 可导入目标、计划、commit；不读取隐藏思维链，不把代码推断当真实意图 |
 
 Define Constraints 的求值规则遵循 [Unity 2020.3 Assembly Definition properties](https://docs.unity3d.com/2020.3/Documentation/Manual/class-AssemblyDefinitionImporter.html)：所有约束行必须成立，单行可使用 `||`，符号可用 `!` 否定。

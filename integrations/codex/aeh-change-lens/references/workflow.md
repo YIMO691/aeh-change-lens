@@ -36,7 +36,7 @@ Inspect changed `.cs`, `.asmdef`, package, and project-setting paths. Resolve as
 
 When two or three assemblies are independently affected, generate one report per assembly. When resolution remains ambiguous or more than three assemblies are material, ask the user to select; do not guess.
 
-Create a non-sensitive request ID. Store reports under `D:\ares\change-lens-output\<repository-name>\`; keep `latest.html` and `latest.analysis.json`. This directory is outside ET6 and may be updated by an explicit skill invocation.
+Create a non-sensitive request ID. Store reports under `D:\ares\change-lens-output\<repository-name>\`; keep `latest.html`, `latest.story.json`, and `latest.analysis.json`. This directory is outside ET6 and may be updated by an explicit skill invocation.
 
 If the current request contains a user goal or an AI plan, create `latest.intent.json` in the same output directory using the `intent-evidence.schema.json` contract. Include only statements actually supplied in the conversation. Do not generate a synthetic plan.
 
@@ -52,6 +52,7 @@ python D:\ares\aeh-change-lens\run_change_lens.py explain <repository> <unity-re
   --request-id <id> `
   --intent-evidence <intent-json-if-present> `
   --analysis-output D:\ares\change-lens-output\<repository-name>\latest.analysis.json `
+  --story-output D:\ares\change-lens-output\<repository-name>\latest.story.json `
   --output D:\ares\change-lens-output\<repository-name>\latest.html `
   --allow-syntax-partial `
   --progress `
@@ -73,12 +74,24 @@ Do not copy NEW project options into OLD, edit Git history, or promote syntax-on
 
 ## 5. Validate and explain
 
-Require exit code zero, a present HTML file, a present analysis JSON, and matching analysis digest in the command result. Read the analysis JSON and report:
+Require exit code zero, present HTML/story/analysis files, and matching analysis digest in the command result. Read `latest.story.json` first.
+
+For quick understanding, report:
+
+- `quick_view.summary_zh`;
+- the OLD/NEW focus steps without raw signatures;
+- change-card impact areas and priority risks.
+
+For a requested detailed breakdown, additionally report:
+
+- `deep_dive.stages` and representative relationships;
+- `deep_dive.decision_points`;
+- source-backed rationale separately from inferred rationale;
+- unresolved dynamic/Unity bindings.
+
+Use the full analysis JSON only to verify or expand technical evidence. Always report:
 
 - status (`FRESH` or `PARTIAL`);
-- main added/removed/updated/moved counts;
-- the most relevant changed relationships;
-- source-backed rationale separately from inferred rationale;
-- limitations and unresolved dynamic/Unity bindings.
+- limitations material to the requested conclusion.
 
-Give the user a clickable local HTML path. Keep raw hashes and schema details in a short technical-evidence note rather than the main explanation.
+Give the user a clickable local HTML path. Do not lead with node/edge counts. Keep raw counts, hashes, and schema details in a short technical-evidence note only when requested.

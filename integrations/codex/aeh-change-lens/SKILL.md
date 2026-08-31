@@ -1,11 +1,11 @@
 ---
 name: aeh-change-lens
-description: Explicitly use AEH Change Lens to explain an OLD-to-NEW Unity C# modification when the user asks for Change Lens, an AI modification path report, or invokes $aeh-change-lens. Do not invoke implicitly for ordinary code review or editing.
+description: Explicitly use AEH Change Lens for a quick or detailed OLD-to-NEW Unity C# modification explanation when the user asks for Change Lens, an AI modification path report, or invokes $aeh-change-lens. Do not invoke implicitly for ordinary code review or editing.
 ---
 
 # AEH Change Lens
 
-Use the local Change Lens tool as a read-only analysis assistant for the user's Unity/gameplay work. The outcome is a Chinese-first explanation of the old path, new path, code facts, supplied intent evidence, inferred rationale, impacts, and unknowns.
+Use the local Change Lens tool as a read-only analysis assistant for the user's Unity/gameplay work. Default to a Chinese-first quick understanding of what changed. Use the detailed implementation breakdown when the user asks why, how, or for a step-by-step explanation.
 
 Before running an analysis, read [references/workflow.md](references/workflow.md) completely.
 
@@ -17,6 +17,7 @@ Before running an analysis, read [references/workflow.md](references/workflow.md
 - Comparison: `HEAD` to `WORKTREE`
 - Language: Chinese first
 - Output: outside the analyzed repository
+- Reading mode: quick understanding unless the user explicitly requests detailed breakdown
 
 Do not expose assembly names, request IDs, manifests, digests, or Worker setup unless they affect the result or the user asks for technical evidence.
 
@@ -34,4 +35,6 @@ Never claim access to hidden model reasoning. Keep these layers distinct:
 
 ## Handoff
 
-Return the clickable report path plus a concise Chinese summary: what changed, old path, new path, likely rationale, direct impacts, and unresolved items. State `PARTIAL` prominently when present. Open the report in a visible browser only when the user asks to open it.
+Read the focused `change-story.json` before the full analysis JSON. In quick mode, return the clickable report plus its one-sentence summary, OLD/NEW focus flow, impact scope, and priority risks. In detailed mode, additionally explain the staged implementation structure and decision points, keeping code facts, source evidence, and inference distinct.
+
+State `PARTIAL` prominently when present. Do not dump raw node/edge counts unless asked for technical evidence. Open the report in a visible browser only when the user asks to open it.
