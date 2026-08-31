@@ -276,7 +276,7 @@ promote business-focus heuristics to compile-confirmed semantics.
 - `--story-output` writes the focused contract for Codex, and the explicit Skill
   now reads it before the full analysis JSON.
 
-The complete local suite passed 94 tests with 4 platform-dependent skips. The
+The complete local suite passed 95 tests with 4 platform-dependent skips. The
 .NET Worker built with 0 warnings and 0 errors, the updated Skill passed its
 validator, and the final HTML remained script-free with no remote resources.
 
@@ -287,3 +287,9 @@ focus steps. Target Git-status hashes were identical before and after
 (`74267bae547e935dccd81a0ccbe2b75befc1cf850eeb6453f584ea2a564e9f23`).
 The report remains structurally honest: missing compile context is prominent,
 and the focused path is not described as a complete runtime call stack.
+
+A follow-up pilot against six newly added Unity Editor C# paths verified that
+Editor lifecycle callbacks no longer displace the Window, Excel Repository and
+Validator responsibilities in the quick summary. Its target-status hash also
+remained identical before and after analysis
+(`c462d9256d2c29da83ef0780673cafa912944d00aac30e3dc04c5af8886b54a3`).

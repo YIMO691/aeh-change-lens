@@ -220,6 +220,36 @@ class ChangeStoryTests(unittest.TestCase):
         ))
         self.assertTrue(any("Generated.Payload" in item["subject_zh"] for item in story["changes"]))
 
+    def test_unity_editor_tooling_prioritizes_roles_over_lifecycle_noise(self) -> None:
+        payload = copy.deepcopy(analysis())
+        additions = (
+            ("editor-window", "TYPE", "ET.EditorTools.ComboEditorWindow"),
+            ("editor-gui", "METHOD", "ET.EditorTools.ComboEditorWindow.OnGUI()"),
+            ("editor-repository", "TYPE", "ET.EditorTools.ComboExcelRepository"),
+            ("editor-load", "METHOD", "ET.EditorTools.ComboExcelRepository.Load(string)"),
+            ("editor-validator", "TYPE", "ET.EditorTools.ComboValidator"),
+            ("editor-validate", "METHOD", "ET.EditorTools.ComboValidator.Validate()"),
+        )
+        for index, (suffix, kind, label) in enumerate(additions):
+            node = _node("NEW", suffix, kind, label, 100 + index, "ADDED")
+            node["location"]["path"] = "Unity/Assets/Editor/Combo/Tool.cs"
+            payload["diff"]["nodes"].append(node)
+        payload["diff"]["summary"]["new_nodes"] += len(additions)
+        payload["diff"]["summary"]["added_nodes"] += len(additions)
+
+        story = ChangeStoryBuilder().build(payload)
+        editor_card = next(
+            item for item in story["quick_view"]["change_cards"] if item["area"] == "EDITOR"
+        )
+
+        self.assertIn("ComboEditorWindow", editor_card["summary_zh"])
+        self.assertIn("ComboExcelRepository", editor_card["summary_zh"])
+        self.assertIn("ComboValidator", editor_card["summary_zh"])
+        self.assertNotIn("OnGUI", editor_card["summary_zh"])
+        self.assertTrue(any(
+            item["area"] == "EDITOR" for item in story["quick_view"]["new_flow"]
+        ))
+
     def test_only_new_worktree_locations_receive_local_links(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

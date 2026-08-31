@@ -199,7 +199,7 @@
       }
     },
     "area": {
-      "enum": ["CONFIGURATION", "SERVER", "PROTOCOL", "CLIENT", "RUNTIME", "TEST", "GENERATED"]
+      "enum": ["CONFIGURATION", "SERVER", "PROTOCOL", "EDITOR", "CLIENT", "RUNTIME", "TEST", "GENERATED"]
     },
     "counts": {
       "type": "object", "additionalProperties": false,

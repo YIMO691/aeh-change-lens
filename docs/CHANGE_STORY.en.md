@@ -53,7 +53,7 @@ Source statements are never promoted to code facts merely because they came from
 
 The default quick view contains a one-sentence summary, an explicitly labeled mental model, up to five business-change cards, at most eight OLD and NEW focus steps, impact scope, and up to four priority risks. Long signatures, repeated conditions, generated-code counts, and full graph relationships do not occupy the landing view.
 
-The detailed view groups representative objects, relationships, and new decision points by configuration, server, protocol, client, runtime, and test stages. Full claims, raw paths, symbol tables, impacts, and limitations remain available under collapsed technical evidence.
+The detailed view groups representative objects, relationships, and new decision points by configuration, server, protocol, Unity Editor tooling, client, runtime, and test stages. Full claims, raw paths, symbol tables, impacts, and limitations remain available under collapsed technical evidence.
 
 `--story-output` optionally writes the same focused `change-story.json`; Codex should read it before the much larger `change-analysis.json`.
 

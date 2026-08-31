@@ -66,16 +66,18 @@ _AREA_ORDER = {
     "CONFIGURATION": 0,
     "SERVER": 1,
     "PROTOCOL": 2,
-    "CLIENT": 3,
-    "RUNTIME": 4,
-    "TEST": 5,
-    "GENERATED": 6,
+    "EDITOR": 3,
+    "CLIENT": 4,
+    "RUNTIME": 5,
+    "TEST": 6,
+    "GENERATED": 7,
 }
 
 _AREA_LABELS = {
     "CONFIGURATION": ("配置与规则", "Configuration and rules", "📋"),
     "SERVER": ("服务端编排", "Server orchestration", "🧠"),
     "PROTOCOL": ("协议与数据", "Protocol and data", "🛰️"),
+    "EDITOR": ("Unity 编辑器工具", "Unity Editor tooling", "🛠️"),
     "CLIENT": ("客户端表现", "Client behavior", "🎮"),
     "RUNTIME": ("运行逻辑", "Runtime logic", "⚙️"),
     "TEST": ("测试保障", "Test coverage", "🧪"),
@@ -385,6 +387,8 @@ class ChangeStoryBuilder:
             return "PROTOCOL"
         if "/generate/" in normalized or "/generated/" in normalized:
             return "GENERATED"
+        if "/assets/editor/" in normalized or "/editor/" in normalized:
+            return "EDITOR"
         if normalized.startswith("/server/") or "/server/" in normalized:
             return "SERVER"
         if normalized.startswith("/unity/") or any(
@@ -440,12 +444,19 @@ class ChangeStoryBuilder:
             "CONDITION": 1,
         }.get(str(node.get("kind")), 0)
         label = str(node.get("label", ""))
-        if re.search(r"(?:^|\.)(?:Try|On|Handle|Execute|Create|Resolve|Validate|Load|Send|Broadcast|GetRandom)", label):
+        if re.search(r"(?:^|\.)(?:Try|On|Handle|Execute|Create|Resolve|Validate|Load|Save|Read|Write|Refresh|Import|Export|Send|Broadcast|GetRandom)", label):
             score += 4
         if re.search(r"(?:^|\.)(?:On|Handle|Execute)[A-Z]", label):
             score += 3
         if re.search(r"(?:^|\.)Try[A-Z]", label):
             score += 2
+        if re.search(r"(?:Window|Repository|Validator|Service|Controller|Manager)$", label):
+            score += 6
+        if re.search(
+            r"(?:^|\.)(?:OnGUI|OnSceneGUI|OnEditorUpdate|OnEnable|OnDisable|OnProjectChange|OnUndoRedo|Update|LateUpdate|FixedUpdate)\(",
+            label,
+        ):
+            score -= 8
         area = self._area(node)
         if area == "GENERATED":
             score -= 12
@@ -504,7 +515,16 @@ class ChangeStoryBuilder:
                 candidates = topic_candidates
             unique: list[dict] = []
             seen: set[str] = set()
-            for node in candidates:
+            ordered_candidates = candidates
+            if area == "EDITOR":
+                ordered_candidates = sorted(
+                    candidates,
+                    key=lambda node: (
+                        0 if node.get("kind") == "TYPE" else 1,
+                        -self._node_score(node), str(node.get("label", "")),
+                    ),
+                )
+            for node in ordered_candidates:
                 label = self._short_label(node["label"])
                 if label in seen or node.get("kind") in {"CONDITION", "RETURN"}:
                     continue
@@ -589,10 +609,22 @@ class ChangeStoryBuilder:
                 node for node in grouped[area]
                 if len(self._label_tokens(node["label"]) & topic_tokens) >= 2
             ]
-            area_limit = 4 if role == "NEW" and area == "SERVER" else 2
+            if role == "NEW" and area == "SERVER":
+                area_limit = 4
+            elif role == "NEW" and area == "EDITOR":
+                area_limit = 6
+            else:
+                area_limit = 2
+            owner_counts: dict[str, int] = {}
             for node in area_candidates:
                 if node.get("kind") not in {"METHOD", "TYPE", "EVENT", "STATE"}:
                     continue
+                if area == "EDITOR":
+                    short = self._short_label(node["label"])
+                    owner = short.split("(", 1)[0].rsplit(".", 1)[0] if "(" in short else short
+                    if owner_counts.get(owner, 0) >= 2:
+                        continue
+                    owner_counts[owner] = owner_counts.get(owner, 0) + 1
                 label = self._compact_label(node["label"])
                 if label in seen:
                     continue
@@ -784,7 +816,14 @@ class ChangeStoryBuilder:
     ) -> tuple[dict, dict]:
         focus_nodes = self._focus_nodes(nodes, edges)
         topic_tokens: set[str] = set()
-        for node in focus_nodes:
+        topic_sources = sorted(
+            focus_nodes,
+            key=lambda node: (
+                0 if node.get("kind") == "TYPE" else 1,
+                -self._node_score(node), str(node.get("label", "")),
+            ),
+        )
+        for node in topic_sources:
             if (
                 node.get("revision") == "NEW"
                 and node.get("change") == "ADDED"
@@ -807,7 +846,20 @@ class ChangeStoryBuilder:
         cards.sort(key=lambda card: _AREA_ORDER[str(card["area"])])
         cards = cards[:_MAX_QUICK_CARDS]
         representative = []
-        for node in focus_nodes:
+        representative_sources = sorted(
+            focus_nodes,
+            key=lambda node: (
+                0 if (
+                    node.get("kind") == "TYPE"
+                    and re.search(
+                        r"(?:Window|Repository|Validator|Service|Controller|Manager)$",
+                        str(node.get("label", "")),
+                    )
+                ) else 1,
+                -self._node_score(node), str(node.get("label", "")),
+            ),
+        )
+        for node in representative_sources:
             if (
                 node.get("revision") != "NEW"
                 or node.get("change") != "ADDED"
@@ -839,6 +891,9 @@ class ChangeStoryBuilder:
         if {"CONFIGURATION", "SERVER", "CLIENT"}.issubset(area_keys):
             analogy_zh = "帮助理解：像把一条固定执行路线改造成“配置剧本 → 服务端编排 → 客户端演出”的流水线。"
             analogy_en = "Mental model: a fixed execution route becomes a configuration script, server orchestration and client presentation pipeline."
+        elif "EDITOR" in area_keys:
+            analogy_zh = "帮助理解：像把原本分散的内容处理工作集中到一间 Unity 可视化工作台，由读取、编辑、校验和保存模块分工协作。"
+            analogy_en = "Mental model: scattered content work moves into a Unity visual workbench whose loading, editing, validation and saving parts cooperate."
         elif any(node.get("kind") == "CONDITION" for node in focus_nodes):
             analogy_zh = "帮助理解：像在原有道路上增加新的岔路和安全护栏，让流程能选择、校验并在失败时退出。"
             analogy_en = "Mental model: new junctions and guardrails are added to the existing road so the flow can choose, validate and stop safely."
