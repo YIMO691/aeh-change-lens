@@ -1,7 +1,7 @@
 interface:
   display_name: "AEH Change Lens"
-  short_description: "先用日常语言看懂 Unity 修改，再按需展开场景和证据"
-  default_prompt: "Use $aeh-change-lens to tell me what changed, why it matters to my work, and what I should verify first."
+  short_description: "讲清 Unity 改动，并带你一步验证"
+  default_prompt: "Use $aeh-change-lens to explain the current Unity change briefly, then give only the first verification action and its success signal."
 
 policy:
   allow_implicit_invocation: false

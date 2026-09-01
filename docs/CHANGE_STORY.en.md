@@ -1,10 +1,10 @@
-# Change Story HTML report
+# Change Canvas HTML report
 
 > English mirror; the [Chinese document](CHANGE_STORY.zh-CN.md) is authoritative. This viewer slice remains inside `CL-WP-02`; it is not a `CL-GATE-02` pass or an activation of a downstream work package.
 
 ## Purpose
 
-Change Story turns an evidence-bound OLD/NEW Roslyn graph diff into a self-contained, Chinese-first HTML report: one question-first scenario by default, OLD/NEW comparison on demand, and a detailed implementation breakdown as evidence. The breakdown reconstructs an engineering structure from evidence; it is not hidden model chain of thought.
+Change Story turns an evidence-bound OLD/NEW Roslyn graph diff into a brief explanation followed by one verification action and an observable success signal. The Chinese-first Change Canvas, question-led chapters, semantic passports, and detailed evidence remain available on demand. The breakdown reconstructs an engineering structure from evidence; it is not hidden model chain of thought.
 
 ## Generate in one command
 
@@ -49,21 +49,38 @@ The optional Git repository root creates local links only for NEW worktree locat
 
 Source statements are never promoted to code facts merely because they came from an AI transcript or commit message. Missing source evidence is shown as missing. Intent hypotheses use “may”, carry `INFERRED` confidence, and link to the triggering edge or mapping IDs.
 
-## Three reading depths
+## Change Canvas reading model
 
-The default Daily Brief answers “What should I look at first today?” with one plain-language change sentence, up to three memory points, work impact, and two or three verification suggestions. Suggestions remain explicitly separate from code facts and retain evidence references.
+### Default entry: 10-second Change Capsule
 
-Understand the change opens Scenario Lens. It answers one reader question, offers at most five scenarios, and bounds each scenario to at most seven OLD/NEW focus objects and six evidence-backed relationships. Each scenario has its own `change_shape`: `ADDED` and `REMOVED` use an asymmetric full-width capability canvas, while `MODIFIED` uses OLD/NEW columns. Technical names stay collapsed. `VERIFIED_FLOW` renders only listed exact relationships as path cards; `PARALLEL_FACTS` remains directionless.
+The `explain` command returns `change_capsule` and `verification_mission` directly. Codex responds with only six lines: conclusion, before, after, impact, first action, and observable success signal. Users do not need to open the HTML. A `PARTIAL` sentence may follow once; later steps, chapters, nodes, paths, hashes, and report locations remain hidden by default.
 
-Check evidence contains staged implementation evidence, decisions, claims, raw paths, impacts, and limitations.
+The capsule compares stable business labels: common labels are retained responsibilities, OLD-only labels are removed focus, and NEW-only labels are added focus. This is a version comparison, not an inferred call sequence or one-to-one mapping.
 
-Change Map Lite remains available as an on-demand OLD / NEW comparison. It classifies the evidence as `MODIFIED`, `ADDED`, `REMOVED`, `TEST_ONLY`, `CONFIG_PROTOCOL`, or `PARALLEL`, then shows a bounded Before / Core change / After map with at most three items per column. The columns are always revision comparison, never calls between the displayed items.
+### Guided verification: one step at a time
 
-Impact scope and the first material risk stay visible. The mental model and up to five area cards move into an optional support disclosure, while long signatures, repeated conditions, generated-code counts, and full graph relationships stay out of the landing view.
+`change_canvas.verification_mission` contains one to three deterministic steps. Every step carries bilingual action and success text plus `evidence_refs` for investigating a mismatch. Mission state is `SUGGESTED` or `PARTIAL`; report generation never marks it completed. When the user asks to be guided, Codex presents only the current step, waits for the observed result, then advances or inspects that step's evidence. Target-project compilation, execution, and mutation still require separate authorization.
 
-The detailed view groups representative objects, relationships, and new decision points by configuration, server, protocol, Unity Editor tooling, client, runtime, and test stages. Stages and decision sections are collapsed by default. Full claims, raw paths, symbol tables, impacts, and limitations remain available under collapsed technical evidence.
+### On-demand entry: Change Canvas
 
-`--story-output` optionally writes the same focused `change-story.json`; Codex should read it before the much larger `change-analysis.json`.
+When the user asks to expand or explain why, the report opens with the first mission action and success signal, followed by the `DELTA` canvas instead of a long list. The canvas contains BEFORE/DELTA/AFTER controls, up to five question-led story chapters, a semantic passport, and the relationship boundary.
+
+The page does not visibly print analysis or story digests. A `PARTIAL` warning appears once.
+
+### Chapters and semantic passports
+
+Each chapter contains at most three BEFORE nodes, four AFTER nodes, and six explicit relationships. Selecting a node reveals its business label, technical name, revision side, change kind, confidence, source location, and evidence identifiers. Added, removed, and empty-sided scenarios remain asymmetric instead of receiving invented placeholder nodes.
+
+### Relationship truth
+
+- `VERIFIED_FLOW` renders only relationships already supported by scenario edges.
+- `PARALLEL_FACTS` renders no directional arrows.
+- Column placement, node position, and reading order never imply a call.
+- `PARTIAL` syntax-only evidence is not promoted to complete static or runtime truth.
+
+### Detailed evidence
+
+Verification boundaries, completion criteria, impacts, evidence-layer claims, symbol changes, and limitations remain below the canvas and collapsed by default. HTML shows representative entries for very long lists; the complete deterministic payload remains in `change-story.json`. Codex should use the returned capsule and mission first, inspect the rest of `change_canvas` only after a follow-up, and open the full analysis only when needed.
 
 ## Focus and safety
 
@@ -76,5 +93,5 @@ The HTML contains no scripts or remote resources. Untrusted titles, labels, path
 - The view is a bounded explanation graph, not a runtime call stack or complete CFG.
 - Code alone cannot prove the AI's actual intent.
 - Large branching graphs are deterministically truncated and disclosed.
-- The viewer uses script-free tabs and disclosure panels; search, zoom, and IDE integration are not implemented.
+- The viewer uses a script-free canvas, radio controls, and disclosure panels; search, free zoom, and IDE integration are not implemented.
 - There is still one Golden Change rather than the planned 10–20, so `CL-GATE-02` remains open.

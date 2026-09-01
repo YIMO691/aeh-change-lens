@@ -199,7 +199,7 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertLessEqual(len(first["quick_view"]["new_flow"]), 8)
         self.assertTrue(first["quick_view"]["old_flow"])
         self.assertTrue(first["quick_view"]["new_flow"])
-        self.assertEqual("1.5.0", first["schema_version"])
+        self.assertEqual("1.7.0", first["schema_version"])
         self.assertEqual("MODIFIED", first["visual_map"]["change_shape"])
         self.assertEqual("VERIFIED_FLOW", first["visual_map"]["relationship_mode"])
         self.assertLessEqual(len(first["visual_map"]["changes"]), 3)
@@ -221,6 +221,49 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertGreaterEqual(len(first["daily_brief"]["checks"]), 2)
         self.assertLessEqual(len(first["daily_brief"]["checks"]), 3)
         self.assertTrue(all(item["evidence_refs"] for item in first["daily_brief"]["checks"]))
+        canvas = first["change_canvas"]
+        self.assertEqual("DELTA", canvas["default_view"])
+        capsule = canvas["capsule"]
+        self.assertEqual(10, capsule["read_time_seconds"])
+        self.assertTrue(capsule["verdict_zh"])
+        self.assertTrue(capsule["before_zh"])
+        self.assertTrue(capsule["after_zh"])
+        self.assertTrue(capsule["impact_zh"])
+        self.assertNotIn("PARTIAL", capsule["verify_zh"])
+        mission = canvas["verification_mission"]
+        self.assertEqual("mission-step:1", mission["first_step_id"])
+        self.assertGreaterEqual(len(mission["steps"]), 1)
+        self.assertLessEqual(len(mission["steps"]), 3)
+        self.assertLessEqual(mission["estimated_minutes"], 5)
+        self.assertEqual(capsule["verify_zh"], mission["steps"][0]["action_zh"])
+        self.assertTrue(all(item["success_zh"] for item in mission["steps"]))
+        self.assertTrue(all(item["evidence_refs"] for item in mission["steps"]))
+        self.assertLessEqual(len(canvas["chapters"]), 5)
+        scenario_by_id = {
+            item["scenario_id"]: item for item in first["scenario_lens"]["scenarios"]
+        }
+        chapter_by_id = {item["chapter_id"]: item for item in canvas["chapters"]}
+        primary_scenario_id = first["scenario_lens"]["primary_scenario_id"]
+        self.assertEqual(
+            primary_scenario_id,
+            chapter_by_id[canvas["primary_chapter_id"]]["scenario_id"],
+        )
+        for chapter in canvas["chapters"]:
+            scenario = scenario_by_id[chapter["scenario_id"]]
+            before_ids = {item["item_id"] for item in scenario["before"]}
+            after_ids = {item["item_id"] for item in scenario["after"]}
+            relationship_ids = {item["edge_id"] for item in scenario["relationships"]}
+            self.assertEqual(before_ids, set(chapter["before_item_ids"]))
+            self.assertEqual(after_ids, set(chapter["after_item_ids"]))
+            self.assertEqual(before_ids | after_ids, set(chapter["delta_item_ids"]))
+            if chapter["delta_item_ids"]:
+                self.assertIn(chapter["default_focus_item_id"], chapter["delta_item_ids"])
+            else:
+                self.assertIsNone(chapter["default_focus_item_id"])
+            if chapter["relationship_mode"] == "VERIFIED_FLOW":
+                self.assertLessEqual(set(chapter["relationship_ids"]), relationship_ids)
+            else:
+                self.assertEqual([], chapter["relationship_ids"])
 
     def test_absent_source_evidence_is_disclosed_not_invented(self) -> None:
         story = ChangeStoryBuilder().build(analysis())
@@ -241,23 +284,23 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertIn("新链路", rendered)
         self.assertIn("CODE_FACT", rendered)
         self.assertIn("INTENT_INFERENCE", rendered)
-        self.assertIn("只看结论", rendered)
-        self.assertIn("理解改法", rendered)
-        self.assertIn("核对证据", rendered)
-        self.assertIn('id="tab-daily" checked', rendered)
-        self.assertIn("我今天应该先看什么", rendered)
-        self.assertIn("建议先验证", rendered)
-        self.assertIn("这是检查建议，不是代码事实", rendered)
-        self.assertIn("先记住这三点", rendered)
-        self.assertIn('class="takeaways"', rendered)
-        self.assertIn("主场景 · MODIFIED", rendered)
-        self.assertIn("选择你要理解的问题", rendered)
-        self.assertIn("scenario-view-0", rendered)
-        self.assertIn("展开完整 OLD / NEW 版本对照", rendered)
-        self.assertNotIn('<details class="stage" open>', rendered)
+        self.assertIn("验证边界", rendered)
+        self.assertIn("详细思路拆解与代码证据", rendered)
+        self.assertIn("语义护照", rendered)
+        self.assertIn("10 秒结论", rendered)
+        self.assertIn("现在只做这一步", rendered)
+        self.assertIn("成功标志", rendered)
+        self.assertIn('class="mission-card"', rendered)
+        self.assertIn('class="capsule-route"', rendered)
+        self.assertIn('id="canvas-view-delta" checked', rendered)
+        self.assertIn('class="chapter-step"', rendered)
+        self.assertIn('class="canvas-node', rendered)
         self.assertIn('data-change-shape="MODIFIED"', rendered)
-        self.assertIn('data-scenario-shape="MODIFIED"', rendered)
-        self.assertIn('aria-label="版本变化，不表示调用"', rendered)
+        self.assertIn(
+            f'data-relationship-mode="{story["change_canvas"]["chapters"][0]["relationship_mode"]}"',
+            rendered,
+        )
+        self.assertEqual(1, rendered.count("PARTIAL"))
         self.assertIn("奖励 &lt;script&gt;alert(1)&lt;/script&gt;", rendered)
         self.assertNotIn("<script", rendered.lower())
         self.assertNotIn("https://", rendered)
@@ -273,8 +316,9 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertEqual(3, len(visual["changes"]))
         self.assertIn("测试保障", visual["headline_zh"])
         self.assertIn("不表示它们按显示顺序相互调用", visual["relationship_note_zh"])
-        self.assertIn('aria-label="并列事实，不表示调用"', rendered)
-        self.assertNotIn('aria-label="版本变化，不表示调用"', rendered)
+        self.assertIn('data-relationship-mode="PARALLEL_FACTS"', rendered)
+        self.assertIn("并列事实", rendered)
+        self.assertNotIn('<div class="verified-route">', rendered)
         self.assertNotIn("原版本没有进入业务聚焦层的显著步骤", rendered)
 
     def test_new_editor_tool_uses_added_shape_with_explicit_absence_context(self) -> None:
@@ -289,10 +333,18 @@ class ChangeStoryTests(unittest.TestCase):
             scenario["change_shape"] == "ADDED"
             for scenario in story["scenario_lens"]["scenarios"]
         ))
+        self.assertIn(
+            "打开 Unity",
+            story["change_canvas"]["verification_mission"]["steps"][0]["action_zh"],
+        )
+        self.assertIn(
+            "选择一份真实数据",
+            story["change_canvas"]["verification_mission"]["steps"][0]["action_zh"],
+        )
         self.assertIn("旧版本未发现对应结构信号", story["visual_map"]["before"][0]["label_zh"])
         self.assertIn("Unity 编辑器工具", story["visual_map"]["after"][0]["label_zh"])
-        self.assertIn('data-scenario-shape="ADDED"', rendered)
-        self.assertIn('class="scenario-single"', rendered)
+        self.assertIn('data-change-shape="ADDED"', rendered)
+        self.assertIn("这一侧没有进入聚焦层的变更证据", rendered)
         self.assertNotIn("旧版本没有进入该场景的聚焦变化证据", rendered)
 
     def test_removed_and_configuration_changes_use_shape_specific_maps(self) -> None:
@@ -423,8 +475,12 @@ class ChangeStoryTests(unittest.TestCase):
             for item in guided["after"]
         ))
         self.assertEqual("VERIFIED_FLOW", guided["relationship_mode"])
-        self.assertIn("已证实的关系路径", rendered)
-        self.assertIn('<article class="route-row">', rendered)
+        self.assertIn("已证实关系", rendered)
+        self.assertEqual(2, rendered.count('<div class="verified-route">'))
+        self.assertIn(
+            '.canvas-scene[data-canvas-view="DELTA"] .canvas-node.role-old',
+            rendered,
+        )
 
     def test_only_new_worktree_locations_receive_local_links(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -493,6 +549,15 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertEqual(0, exit_code)
         self.assertEqual("PARTIAL", result["status"])
         self.assertEqual(64, len(result["story_digest"]))
+        self.assertEqual(10, result["change_capsule"]["read_time_seconds"])
+        self.assertEqual(
+            story_payload["change_canvas"]["capsule"],
+            result["change_capsule"],
+        )
+        self.assertEqual(
+            story_payload["change_canvas"]["verification_mission"],
+            result["verification_mission"],
+        )
         self.assertIn("阻止无效奖励", rendered)
         self.assertIn('data-story-digest=', rendered)
         self.assertEqual(str(story_path.resolve()), result["story_path"])

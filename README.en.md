@@ -7,9 +7,11 @@
 
 [中文](README.md) | English | [Documentation index](docs/README.md)
 
-AEH Change Lens is a read-only change-explanation tool for Unity/C# gameplay code. It turns the full OLD/NEW analysis into two evidence-linked levels: a quick understanding view by default and a detailed implementation breakdown on demand.
+AEH Change Lens is a read-only change-explanation tool for Unity/C# gameplay code. It first explains the change briefly, then offers one small verification action with an observable success signal. The Change Canvas and implementation evidence remain available on demand.
 
 It does not read or reconstruct hidden model chain of thought.
+
+The interaction borrows the “learn by completing a real outcome” principle from [project-based-learning](https://github.com/practical-tutorials/project-based-learning) and narrows it to one 1–5 minute mission per change. AEH neither copies its tutorial catalog nor depends on its code.
 
 > [!IMPORTANT]
 > This project is a development preview. `CL-WP-02` remains `IN_PROGRESS`, and no release assessment has been completed. The current build is intended for a controlled personal workflow and prototype validation.
@@ -19,7 +21,9 @@ It does not read or reconstruct hidden model chain of thought.
 - Compare an OLD Git revision with a NEW revision or worktree without checkout.
 - Extract calls, branches, exceptions, state access, lifecycle, coroutine, async, event, and common Unity relationships with Roslyn.
 - Produce deterministic added, removed, updated, moved, and context relationships.
-- Generate a self-contained, script-free, Chinese-first Change Story HTML with quick and detailed views.
+- Return a 10-second Change Capsule plus a `verification_mission`, with an action and observable success signal.
+- Guide “verify this with me” one step at a time without presenting a suggested mission as already executed.
+- Keep the script-free Change Canvas as an optional drill-down with BEFORE/DELTA/AFTER views, chapters, and semantic passports.
 - De-emphasize generated code, tests, and syntax fragments on the landing view, then organize changes by configuration, server, protocol, client, and tests.
 - Keep `CODE_FACT`, `SOURCE_EVIDENCE`, and `INTENT_INFERENCE` separate.
 - Fail closed or become explicitly `PARTIAL` when evidence is missing, stale, escaped, or unsupported.
@@ -41,7 +45,7 @@ Start a new Codex session and invoke:
 $aeh-change-lens analyze my current ET6 changes
 ```
 
-The Skill does not activate implicitly during ordinary coding tasks. It defaults to the current Git repository, then the personal ET6 workspace, and writes reports outside the analyzed repository.
+The Skill does not activate implicitly during ordinary coding tasks. It defaults to the current Git repository, then the personal ET6 workspace, and writes reports outside the analyzed repository. Its default answer contains the conclusion, before, after, impact, the first action, and its success signal. Ask it to “verify this with me” for one-step-at-a-time guidance, or “expand” for the canvas and evidence.
 
 ### CLI workflow
 
@@ -86,13 +90,13 @@ Run directly from the source checkout without installing the package:
 python .\run_change_lens.py --help
 ```
 
-See [Change Story](docs/CHANGE_STORY.en.md) for the complete command and intent-evidence contract.
+See [Change Canvas](docs/CHANGE_STORY.en.md) for the complete command and intent-evidence contract.
 
 ## Output
 
-The default landing view is a Daily Brief: one plain-language change sentence, up to three memory points, work impact, and two or three clearly labeled verification suggestions. Readers then choose Understand the change for Scenario Lens or Check evidence for the full technical view. Added and removed scenarios use an asymmetric full-width canvas instead of an empty half. Verified relationships become individually inspectable path cards; exact relationship evidence is never replaced with display-order storytelling.
+The default Codex response is a six-line result: conclusion, before, after, impact, first action, and success signal. Users do not need to open a report. `verification_mission` contains one to three evidence-linked steps, but only the first is shown until the user reports an observed result. When detail is requested, the HTML provides the DELTA canvas, question-led chapters, and semantic passports. Only `VERIFIED_FLOW` relationships receive arrows; `PARALLEL_FACTS` remain explicitly unordered.
 
-The detailed view retains staged implementation evidence, decisions, raw OLD/NEW chains, claims, impacts, and limitations. The optional `change-story.json` lets Codex read the focused map before opening the full analysis.
+Detailed claims, impacts, symbol changes, and limitations remain collapsed below the canvas. Long lists show representative entries in HTML while the complete deterministic data stays in the optional `change-story.json`.
 
 ## Compile baseline
 
@@ -137,7 +141,7 @@ Only the repository-owned Worker may be built by the test workflow. Real Unity p
 
 - [Documentation index](docs/README.md)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.en.md)
-- [Change Story report](docs/CHANGE_STORY.en.md)
+- [Change Canvas report](docs/CHANGE_STORY.en.md)
 - [C#/Unity capability matrix](docs/CAPABILITY_MATRIX.en.md)
 - [OLD/NEW graph diff](docs/GRAPH_DIFF.en.md)
 - [Roslyn Worker](docs/ROSLYN_WORKER.en.md)
