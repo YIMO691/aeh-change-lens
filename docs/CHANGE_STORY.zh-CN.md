@@ -11,9 +11,9 @@ Change Story 将已有的、证据绑定的 OLD/NEW Roslyn 图差异转换为一
         |
 业务聚焦、问题场景与生成代码降噪
         v
-一句话结论 → 一个验证步骤 → 一个成功标志
-                 ├→ 结果不一致：按本步骤证据定位
-                 └→ 需要原理：BEFORE / DELTA / AFTER → 语义护照 → 技术证据
+一句话结论 → 四幕故事板：原来 → 变化 → 现在 → 验证
+                         ├→ 结果不一致：按本步骤证据定位
+                         └→ 需要原理：详细 Change Canvas → 语义护照 → 技术证据
 ```
 
 报告用于回答五个问题：到底改了什么、原来怎样、现在怎样、为什么可能这样实现、哪些结论仍不确定。详细拆解是依据代码证据重建的工程实现结构，不是模型隐藏思维链。
@@ -114,19 +114,22 @@ change-lens render-report change-analysis.json `
 
 任务的 `state` 只能是 `SUGGESTED` 或 `PARTIAL`，生成报告本身不会把它标记为完成。用户要求“带我验证”时，Codex 只给当前步骤并等待观察结果；成功后进入下一步，不一致时只展开该步证据。未经额外授权，Skill 不编译、运行或修改目标 Unity 项目。
 
-### 按需入口：Change Canvas
+### 按需入口：四幕修改故事板
 
-当用户要求“展开”“为什么”或点名某个范围时，再进入 `DELTA` 画布。HTML 首屏固定包含：
+当用户要求“展开”“为什么”或点名某个范围时，HTML 先提供无需探索大图的四幕故事板：
 
 - 一句中文业务结论与核心问题；
-- 一个突出显示的首要验证步骤、成功标志和预计时间；
-- `BEFORE / DELTA / AFTER` 三态切换，默认选择 `DELTA`；
-- 最多 5 个按业务问题组织的故事章节；
-- 当前章节的 OLD/NEW 关键节点和变化数量；
-- 当前选中节点的语义护照；
+- `原来 / 变化 / 现在 / 验证` 四幕切换，默认先看“变化”获得答案；
+- 最多 7 个稳定业务槽位：同一业务标签在各幕保持同一位置；
+- “变化”幕在槽位内直接展示旧状态 → 新状态；
+- “验证”幕只突出首要操作、成功标志和预计时间；
 - 一条明确的关系证据边界。
 
-在 1280×900 视口内，用户无需滚动即可看到结论、章节、画布和语义护照。页面不显示 analysis/story digest；`PARTIAL` 说明只出现一次。
+只有业务标签完全一致的 OLD/NEW 项才复用一个槽位；单侧项保持新增或移除状态，不使用相似度猜测配对。只有 `VERIFIED_FLOW` 的现有关系才能出现在故事板中，`PARALLEL_FACTS` 不绘制箭头。
+
+### 按需深挖：Change Canvas
+
+故事板下方的详细 Change Canvas 默认折叠。展开后才显示 `BEFORE / DELTA / AFTER`、最多 5 个按业务问题组织的章节、OLD/NEW 关键节点、变化数量和当前节点的语义护照。页面不显示 analysis/story digest；`PARTIAL` 说明只出现一次。
 
 ### 故事章节与语义护照
 
@@ -143,7 +146,7 @@ change-lens render-report change-analysis.json `
 
 ### 详细思路拆解
 
-画布下方保留验证边界、完成条件、直接影响、`CODE_FACT / SOURCE_EVIDENCE / INTENT_INFERENCE`、符号变化和限制，但默认折叠。HTML 对超长清单只展示代表性条目；完整确定性数据保留在 `change-story.json`，避免再次形成数百行报告。
+故事板下方保留验证边界、完成条件、直接影响、`CODE_FACT / SOURCE_EVIDENCE / INTENT_INFERENCE`、符号变化和限制；详细画布与技术证据默认折叠。HTML 对超长清单只展示代表性条目；完整确定性数据保留在 `change-story.json`，避免再次形成数百行报告。
 
 可选 `--story-output` 保存聚焦后的 `change-story.json`。Codex 应先使用命令返回的 `change_capsule` 和 `verification_mission`，追问时再读取其余 `change_canvas`，最后才按需进入完整 analysis。
 

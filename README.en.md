@@ -23,7 +23,7 @@ The interaction borrows the “learn by completing a real outcome” principle f
 - Produce deterministic added, removed, updated, moved, and context relationships.
 - Return a 10-second Change Capsule plus a `verification_mission`, with an action and observable success signal.
 - Guide “verify this with me” one step at a time without presenting a suggested mission as already executed.
-- Keep the script-free Change Canvas as an optional drill-down with BEFORE/DELTA/AFTER views, chapters, and semantic passports.
+- Lead the optional script-free HTML with a four-beat visual story—Before, Change, Now, Verify—using at most seven stable business slots; keep the full Change Canvas, chapters, passports, and evidence collapsed for drill-down.
 - De-emphasize generated code, tests, and syntax fragments on the landing view, then organize changes by configuration, server, protocol, client, and tests.
 - Keep `CODE_FACT`, `SOURCE_EVIDENCE`, and `INTENT_INFERENCE` separate.
 - Fail closed or become explicitly `PARTIAL` when evidence is missing, stale, escaped, or unsupported.
@@ -94,7 +94,7 @@ See [Change Canvas](docs/CHANGE_STORY.en.md) for the complete command and intent
 
 ## Output
 
-The default Codex response is a six-line result: conclusion, before, after, impact, first action, and success signal. Users do not need to open a report. `verification_mission` contains one to three evidence-linked steps, but only the first is shown until the user reports an observed result. When detail is requested, the HTML provides the DELTA canvas, question-led chapters, and semantic passports. Only `VERIFIED_FLOW` relationships receive arrows; `PARALLEL_FACTS` remain explicitly unordered.
+The default Codex response is a six-line result: conclusion, before, after, impact, first action, and success signal. Users do not need to open a report. `verification_mission` contains one to three evidence-linked steps, but only the first is shown until the user reports an observed result. When detail is requested, the HTML starts with a four-beat visual story that preserves slot positions across BEFORE, DELTA, AFTER, and VERIFY. The full question-led Change Canvas and semantic passports are collapsed below it. Only `VERIFIED_FLOW` relationships receive arrows; `PARALLEL_FACTS` remain explicitly unordered.
 
 Detailed claims, impacts, symbol changes, and limitations remain collapsed below the canvas. Long lists show representative entries in HTML while the complete deterministic data stays in the optional `change-story.json`.
 

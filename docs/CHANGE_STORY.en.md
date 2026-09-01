@@ -61,9 +61,15 @@ The capsule compares stable business labels: common labels are retained responsi
 
 `change_canvas.verification_mission` contains one to three deterministic steps. Every step carries bilingual action and success text plus `evidence_refs` for investigating a mismatch. Mission state is `SUGGESTED` or `PARTIAL`; report generation never marks it completed. When the user asks to be guided, Codex presents only the current step, waits for the observed result, then advances or inspects that step's evidence. Target-project compilation, execution, and mutation still require separate authorization.
 
-### On-demand entry: Change Canvas
+### On-demand entry: four-beat visual story
 
-When the user asks to expand or explain why, the report opens with the first mission action and success signal, followed by the `DELTA` canvas instead of a long list. The canvas contains BEFORE/DELTA/AFTER controls, up to five question-led story chapters, a semantic passport, and the relationship boundary.
+When the user asks to expand or explain why, the HTML opens with a bounded four-beat storyboard: Before, Change, Now, and Verify. It uses at most seven stable business slots, keeps the same business label in the same position, shows old-to-new state inside each DELTA slot, and reserves the VERIFY beat for one action and observable success signal. DELTA is the default so the answer appears immediately.
+
+Only exact business-label matches share a slot; single-sided items remain visibly added or removed. Existing `VERIFIED_FLOW` relationships may appear as connectors, while `PARALLEL_FACTS` never receive arrows.
+
+### On-demand drill-down: Change Canvas
+
+The detailed Change Canvas is collapsed below the storyboard. Expanding it reveals BEFORE/DELTA/AFTER controls, up to five question-led chapters, OLD/NEW nodes, change counts, semantic passports, and technical evidence.
 
 The page does not visibly print analysis or story digests. A `PARTIAL` warning appears once.
 

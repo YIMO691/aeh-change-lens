@@ -10,7 +10,7 @@
     "claims", "impacts", "limitations", "canonical_digest"
   ],
   "properties": {
-    "schema_version": { "const": "1.7.0" },
+    "schema_version": { "const": "1.8.0" },
     "story_id": { "type": "string", "pattern": "^story:[a-f0-9]{24}$" },
     "language": { "const": "zh-CN" },
     "status": { "enum": ["FRESH", "PARTIAL"] },
@@ -339,6 +339,97 @@
         "boundary_en": { "type": "string", "minLength": 1 }
       }
     },
+    "visual_story_slot": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "slot_id", "order", "area", "before_item_id", "after_item_id",
+        "before_label_zh", "after_label_zh", "change", "evidence_refs"
+      ],
+      "properties": {
+        "slot_id": { "type": "string", "pattern": "^story-slot:[1-7]$" },
+        "order": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "area": { "$ref": "#/$defs/area" },
+        "before_item_id": {
+          "type": ["string", "null"],
+          "pattern": "^scenario-item:[a-f0-9]{16}$"
+        },
+        "after_item_id": {
+          "type": ["string", "null"],
+          "pattern": "^scenario-item:[a-f0-9]{16}$"
+        },
+        "before_label_zh": { "type": "string", "minLength": 1 },
+        "after_label_zh": { "type": "string", "minLength": 1 },
+        "change": { "$ref": "common.schema.json#/$defs/change_kind" },
+        "evidence_refs": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "visual_story_connector": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "connector_id", "source_slot_id", "target_slot_id", "views",
+        "relation_zh", "confidence", "evidence_refs"
+      ],
+      "properties": {
+        "connector_id": { "type": "string", "minLength": 1 },
+        "source_slot_id": { "type": "string", "pattern": "^story-slot:[1-7]$" },
+        "target_slot_id": { "type": "string", "pattern": "^story-slot:[1-7]$" },
+        "views": {
+          "type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true,
+          "items": { "enum": ["BEFORE", "DELTA", "AFTER"] }
+        },
+        "relation_zh": { "type": "string", "minLength": 1 },
+        "confidence": { "$ref": "common.schema.json#/$defs/confidence" },
+        "evidence_refs": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "visual_story_beat": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "beat_id", "order", "view", "title_zh", "caption_zh", "focus_slot_ids"
+      ],
+      "properties": {
+        "beat_id": { "enum": ["story-beat:before", "story-beat:delta", "story-beat:after", "story-beat:verify"] },
+        "order": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "view": { "enum": ["BEFORE", "DELTA", "AFTER", "VERIFY"] },
+        "title_zh": { "type": "string", "minLength": 1 },
+        "caption_zh": { "type": "string", "minLength": 1 },
+        "focus_slot_ids": {
+          "type": "array", "maxItems": 7, "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^story-slot:[1-7]$" }
+        }
+      }
+    },
+    "visual_story": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "default_beat", "relationship_mode", "slots", "connectors", "beats",
+        "verify_step_id", "boundary_note_zh"
+      ],
+      "properties": {
+        "default_beat": { "const": "DELTA" },
+        "relationship_mode": { "enum": ["VERIFIED_FLOW", "PARALLEL_FACTS"] },
+        "slots": {
+          "type": "array", "maxItems": 7,
+          "items": { "$ref": "#/$defs/visual_story_slot" }
+        },
+        "connectors": {
+          "type": "array", "maxItems": 6,
+          "items": { "$ref": "#/$defs/visual_story_connector" }
+        },
+        "beats": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "items": { "$ref": "#/$defs/visual_story_beat" }
+        },
+        "verify_step_id": { "type": "string", "pattern": "^mission-step:1$" },
+        "boundary_note_zh": { "type": "string", "minLength": 1 }
+      }
+    },
     "canvas_chapter": {
       "type": "object", "additionalProperties": false,
       "required": [
@@ -381,13 +472,14 @@
     },
     "change_canvas": {
       "type": "object", "additionalProperties": false,
-      "required": ["default_view", "primary_chapter_id", "summary", "capsule", "verification_mission", "partial_note_zh", "chapters"],
+      "required": ["default_view", "primary_chapter_id", "summary", "capsule", "verification_mission", "visual_story", "partial_note_zh", "chapters"],
       "properties": {
         "default_view": { "const": "DELTA" },
         "primary_chapter_id": { "type": "string", "pattern": "^canvas-chapter:[a-z-]+$" },
         "summary": { "$ref": "#/$defs/canvas_summary" },
         "capsule": { "$ref": "#/$defs/change_capsule" },
         "verification_mission": { "$ref": "#/$defs/verification_mission" },
+        "visual_story": { "$ref": "#/$defs/visual_story" },
         "partial_note_zh": { "type": "string", "minLength": 1 },
         "chapters": {
           "type": "array", "minItems": 1, "maxItems": 5,

@@ -17,7 +17,7 @@ Before running an analysis, read [references/workflow.md](references/workflow.md
 - Comparison: `HEAD` to `WORKTREE`
 - Language: Chinese first
 - Output: outside the analyzed repository
-- Reading mode: `change_canvas.capsule` plus the first `verification_mission` step; do not require the user to open the HTML
+- Reading mode: `change_canvas.capsule` plus the first `verification_mission` step; when expanded, read `change_canvas.visual_story` in BEFORE → DELTA → AFTER → VERIFY order before the detailed chapters
 
 Do not expose assembly names, request IDs, manifests, digests, or Worker setup unless they affect the result or the user asks for technical evidence.
 
@@ -59,6 +59,6 @@ When the user asks “带我验证”, “开始验证”, or equivalent, guide 
 
 This protocol does not authorize compiling or running the target Unity project. Ask for separate authorization before any target-project execution or write.
 
-When the user selects a chapter or node, explain only that scope. Resolve canvas item IDs back to matching `scenario_lens` items for the semantic passport: business label, technical label, revision side, change kind, confidence, source location, and evidence. Respect `relationship_mode`: `VERIFIED_FLOW` permits only the exact listed relationships; `PARALLEL_FACTS` must remain a set of related facts rather than a narrated call sequence. In detailed mode, expand that selected scenario first, then use staged implementation structure and decision points as evidence while keeping code facts, source evidence, and inference distinct.
+When the user asks to expand without naming a scope, summarize the four `visual_story.beats` first and preserve their stable slot order. Do not turn slot adjacency into a call sequence. When the user selects a chapter or node, explain only that scope. Resolve canvas item IDs back to matching `scenario_lens` items for the semantic passport: business label, technical label, revision side, change kind, confidence, source location, and evidence. Respect `relationship_mode`: `VERIFIED_FLOW` permits only the exact listed relationships; `PARALLEL_FACTS` must remain a set of related facts rather than a narrated call sequence. In detailed mode, expand that selected scenario first, then use staged implementation structure and decision points as evidence while keeping code facts, source evidence, and inference distinct.
 
 State `PARTIAL` once when present. Expand a chapter, semantic passport, or technical evidence only after the user asks “为什么”, “展开”, requests detail, or names a scope. Open or link the report only when the user asks for it.

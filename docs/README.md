@@ -7,7 +7,7 @@
 | 主题 | 中文 | English |
 |---|---|---|
 | 实施范围、工作包与 Gate | [实施方案](IMPLEMENTATION_PLAN.zh-CN.md) | [Implementation plan](IMPLEMENTATION_PLAN.en.md) |
-| 用户可见 OLD → NEW 报告 | [Change Canvas](CHANGE_STORY.zh-CN.md) | [Change Canvas](CHANGE_STORY.en.md) |
+| 用户可见 OLD → NEW 报告 | [修改故事板与 Change Canvas](CHANGE_STORY.zh-CN.md) | [Visual story and Change Canvas](CHANGE_STORY.en.md) |
 | C#/Unity 支持范围 | [能力矩阵](CAPABILITY_MATRIX.zh-CN.md) | [Capability matrix](CAPABILITY_MATRIX.en.md) |
 | 图节点映射和差异语义 | [图差异契约](GRAPH_DIFF.zh-CN.md) | [Graph diff contract](GRAPH_DIFF.en.md) |
 | Roslyn Worker 和真实项目测量 | [Roslyn Worker](ROSLYN_WORKER.zh-CN.md) | [Roslyn Worker](ROSLYN_WORKER.en.md) |
