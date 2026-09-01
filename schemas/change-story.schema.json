@@ -6,11 +6,11 @@
   "additionalProperties": false,
   "required": [
     "schema_version", "story_id", "language", "status", "title",
-    "analysis_digest", "revisions", "overview", "quick_view", "visual_map", "scenario_lens", "daily_brief", "deep_dive", "lanes", "changes",
+    "analysis_digest", "revisions", "overview", "quick_view", "visual_map", "scenario_lens", "daily_brief", "change_canvas", "deep_dive", "lanes", "changes",
     "claims", "impacts", "limitations", "canonical_digest"
   ],
   "properties": {
-    "schema_version": { "const": "1.5.0" },
+    "schema_version": { "const": "1.7.0" },
     "story_id": { "type": "string", "pattern": "^story:[a-f0-9]{24}$" },
     "language": { "const": "zh-CN" },
     "status": { "enum": ["FRESH", "PARTIAL"] },
@@ -37,6 +37,7 @@
     "visual_map": { "$ref": "#/$defs/visual_map" },
     "scenario_lens": { "$ref": "#/$defs/scenario_lens" },
     "daily_brief": { "$ref": "#/$defs/daily_brief" },
+    "change_canvas": { "$ref": "#/$defs/change_canvas" },
     "deep_dive": { "$ref": "#/$defs/deep_dive" },
     "lanes": {
       "type": "object", "additionalProperties": false,
@@ -267,6 +268,131 @@
         "scope_note_en": { "type": "string", "minLength": 1 },
         "scenarios": { "type": "array", "minItems": 1, "maxItems": 5, "items": { "$ref": "#/$defs/scenario" } },
         "visual_map_shape": { "enum": ["MODIFIED", "ADDED", "REMOVED", "TEST_ONLY", "CONFIG_PROTOCOL", "PARALLEL"] }
+      }
+    },
+    "canvas_summary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["added_items", "removed_items", "changed_items"],
+      "properties": {
+        "added_items": { "type": "integer", "minimum": 0 },
+        "removed_items": { "type": "integer", "minimum": 0 },
+        "changed_items": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "change_capsule": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "read_time_seconds", "verdict_zh", "before_zh", "after_zh",
+        "impact_zh", "verify_zh"
+      ],
+      "properties": {
+        "read_time_seconds": { "const": 10 },
+        "verdict_zh": { "type": "string", "minLength": 1 },
+        "before_zh": { "type": "string", "minLength": 1 },
+        "after_zh": { "type": "string", "minLength": 1 },
+        "impact_zh": { "type": "string", "minLength": 1 },
+        "verify_zh": { "type": "string", "minLength": 1 }
+      }
+    },
+    "verification_step": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "step_id", "order", "action_zh", "action_en", "success_zh",
+        "success_en", "evidence_refs"
+      ],
+      "properties": {
+        "step_id": { "type": "string", "pattern": "^mission-step:[1-3]$" },
+        "order": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "action_zh": { "type": "string", "minLength": 1 },
+        "action_en": { "type": "string", "minLength": 1 },
+        "success_zh": { "type": "string", "minLength": 1 },
+        "success_en": { "type": "string", "minLength": 1 },
+        "evidence_refs": {
+          "type": "array", "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "verification_mission": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "mission_id", "title_zh", "title_en", "goal_zh", "goal_en",
+        "estimated_minutes", "state", "first_step_id", "steps",
+        "completion_zh", "completion_en", "boundary_zh", "boundary_en"
+      ],
+      "properties": {
+        "mission_id": { "type": "string", "pattern": "^verification-mission:[a-z-]+$" },
+        "title_zh": { "type": "string", "minLength": 1 },
+        "title_en": { "type": "string", "minLength": 1 },
+        "goal_zh": { "type": "string", "minLength": 1 },
+        "goal_en": { "type": "string", "minLength": 1 },
+        "estimated_minutes": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "state": { "enum": ["SUGGESTED", "PARTIAL"] },
+        "first_step_id": { "type": "string", "pattern": "^mission-step:1$" },
+        "steps": {
+          "type": "array", "minItems": 1, "maxItems": 3,
+          "items": { "$ref": "#/$defs/verification_step" }
+        },
+        "completion_zh": { "type": "string", "minLength": 1 },
+        "completion_en": { "type": "string", "minLength": 1 },
+        "boundary_zh": { "type": "string", "minLength": 1 },
+        "boundary_en": { "type": "string", "minLength": 1 }
+      }
+    },
+    "canvas_chapter": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "chapter_id", "scenario_id", "order", "title_zh", "question_zh",
+        "change_shape", "relationship_mode", "before_item_ids", "delta_item_ids",
+        "after_item_ids", "relationship_ids", "default_focus_item_id", "summary",
+        "boundary_note_zh"
+      ],
+      "properties": {
+        "chapter_id": { "type": "string", "pattern": "^canvas-chapter:[a-z-]+$" },
+        "scenario_id": { "type": "string", "pattern": "^scenario:[a-z-]+$" },
+        "order": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "title_zh": { "type": "string", "minLength": 1 },
+        "question_zh": { "type": "string", "minLength": 1 },
+        "change_shape": { "enum": ["MODIFIED", "ADDED", "REMOVED", "PARALLEL"] },
+        "relationship_mode": { "enum": ["VERIFIED_FLOW", "PARALLEL_FACTS"] },
+        "before_item_ids": {
+          "type": "array", "maxItems": 3, "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^scenario-item:[a-f0-9]{16}$" }
+        },
+        "delta_item_ids": {
+          "type": "array", "maxItems": 7, "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^scenario-item:[a-f0-9]{16}$" }
+        },
+        "after_item_ids": {
+          "type": "array", "maxItems": 4, "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^scenario-item:[a-f0-9]{16}$" }
+        },
+        "relationship_ids": {
+          "type": "array", "maxItems": 6, "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "default_focus_item_id": {
+          "type": ["string", "null"],
+          "pattern": "^scenario-item:[a-f0-9]{16}$"
+        },
+        "summary": { "$ref": "#/$defs/canvas_summary" },
+        "boundary_note_zh": { "type": "string", "minLength": 1 }
+      }
+    },
+    "change_canvas": {
+      "type": "object", "additionalProperties": false,
+      "required": ["default_view", "primary_chapter_id", "summary", "capsule", "verification_mission", "partial_note_zh", "chapters"],
+      "properties": {
+        "default_view": { "const": "DELTA" },
+        "primary_chapter_id": { "type": "string", "pattern": "^canvas-chapter:[a-z-]+$" },
+        "summary": { "$ref": "#/$defs/canvas_summary" },
+        "capsule": { "$ref": "#/$defs/change_capsule" },
+        "verification_mission": { "$ref": "#/$defs/verification_mission" },
+        "partial_note_zh": { "type": "string", "minLength": 1 },
+        "chapters": {
+          "type": "array", "minItems": 1, "maxItems": 5,
+          "items": { "$ref": "#/$defs/canvas_chapter" }
+        }
       }
     },
     "daily_check": {

@@ -287,10 +287,10 @@ class RevisionChangeAnalyzerTests(unittest.TestCase):
             for item in analysis["diff"]["mappings"]
         ))
         self.assertIn("预检 OLD/NEW revision 编译基线", progress.getvalue())
-        self.assertIn("生成三档阅读 Change Story", progress.getvalue())
+        self.assertIn("生成 Change Canvas", progress.getvalue())
         rendered = report_path.read_text(encoding="utf-8")
-        self.assertIn("PARTIAL", rendered)
-        self.assertIn("PARTIAL 结构分析显示", rendered)
+        self.assertEqual(1, rendered.count("PARTIAL"))
+        self.assertIn('class="partial-banner"', rendered)
         self.assertNotIn("CODE_FACT · CONFIRMED_STATIC", rendered)
         self.assertEqual(
             before, git(self.root, "status", "--porcelain=v1", "--untracked-files=all")

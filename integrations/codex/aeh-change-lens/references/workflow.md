@@ -8,7 +8,7 @@ Use this precedence:
 
 1. repository and Unity project named by the user;
 2. the current exact Git root and its Unity project;
-3. `D:\ares\project\ET6` and `D:\ares\project\ET6\Unity`.
+3. `D:\ares2\project\ET6` and `D:\ares2\project\ET6\Unity`.
 
 Confirm the Git root with a read-only command. Find Unity roots by the pair `Assets/` plus `ProjectSettings/ProjectVersion.txt`. Do not recursively search outside the selected repository.
 
@@ -74,20 +74,17 @@ Do not copy NEW project options into OLD, edit Git history, or promote syntax-on
 
 ## 5. Validate and explain
 
-Require exit code zero, present HTML/story/analysis files, and matching analysis digest in the command result. Read `latest.story.json` first.
+Require exit code zero, present HTML/story/analysis files, and matching analysis digest in the command result. Read the command's `change_capsule` and `verification_mission` first; use `latest.story.json` only when more detail is requested.
 
-For quick understanding, report:
+For quick understanding, return the four explanatory `change_capsule` fields followed by only the first mission step and its success signal, in the order defined by `SKILL.md`. Add one short `PARTIAL` sentence only when required. Do not enumerate later steps, chapters, counts, paths, or report artifacts, and do not tell the user to open the HTML.
 
-- `daily_brief.what_changed_zh` as the one-sentence answer;
-- the one to three `scenario_lens.takeaways_zh` memory points;
-- `daily_brief.why_it_matters_zh` as work context;
-- at most three `daily_brief.checks`, explicitly introduced as verification suggestions rather than code facts.
+When the user asks to be guided through verification, use `verification_mission.steps` as a conversational state machine. Present one step, wait for the observed result, then continue. Treat `success_zh` as the observable gate, not as a claim that the tool already ran the target project. Use the step's `evidence_refs` only to investigate a mismatch. Never mark the mission complete solely because the report was generated.
 
-Do not enumerate scenarios in daily mode. When the user asks how the change works, explain the primary scenario question and at most three other scenario titles. Interpret `change_shape=ADDED` or `REMOVED` as an asymmetric scene rather than inventing an empty OLD or NEW lane. Do not narrate `PARALLEL_FACTS` in display order as a call chain. Use `visual_map` only when an OLD / NEW version comparison is requested, and use `quick_view` only for optional area and mental-model context.
+When the user asks how the change works, explain the primary chapter and at most three other chapter titles. Interpret `change_shape=ADDED` or `REMOVED` as an asymmetric scene rather than inventing an empty OLD or NEW lane. Do not narrate `PARALLEL_FACTS` in display order as a call chain. Use `visual_map` only as backward-compatible secondary evidence, and use `quick_view` only for optional area and mental-model context.
 
 For a requested detailed breakdown, additionally report:
 
-- only the selected `scenario_lens.scenarios` entry first;
+- only the selected `change_canvas.chapters` entry and its referenced scenario items first;
 - `deep_dive.stages` and representative relationships;
 - `deep_dive.decision_points`;
 - source-backed rationale separately from inferred rationale;
@@ -98,4 +95,4 @@ Use the full analysis JSON only to verify or expand technical evidence. Always r
 - status (`FRESH` or `PARTIAL`);
 - limitations material to the requested conclusion.
 
-Give the user a clickable local HTML path. Do not lead with node/edge counts. Keep raw counts, hashes, and schema details in a short technical-evidence note only when requested.
+Give the user a clickable local HTML path only when requested. Do not lead with node/edge counts. Keep raw counts, hashes, and schema details in a short technical-evidence note only when requested.

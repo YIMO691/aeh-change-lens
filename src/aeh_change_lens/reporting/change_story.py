@@ -249,8 +249,13 @@ class ChangeStoryBuilder:
             scenario_lens=scenario_lens,
             visual_map=visual_map,
         )
+        change_canvas = self._change_canvas(
+            status=str(analysis["status"]),
+            scenario_lens=scenario_lens,
+            daily_brief=daily_brief,
+        )
         semantic = {
-            "schema_version": "1.5.0",
+            "schema_version": "1.7.0",
             "story_id": f"story:{analysis_digest[:24]}",
             "language": "zh-CN",
             "status": str(analysis["status"]),
@@ -266,6 +271,7 @@ class ChangeStoryBuilder:
             "visual_map": visual_map,
             "scenario_lens": scenario_lens,
             "daily_brief": daily_brief,
+            "change_canvas": change_canvas,
             "deep_dive": deep_dive,
             "lanes": lanes,
             "changes": changes,
@@ -274,6 +280,273 @@ class ChangeStoryBuilder:
             "limitations": sorted(set(limitations)),
         }
         return {**semantic, "canonical_digest": _canonical_digest(semantic)}
+
+    @staticmethod
+    def _change_canvas(
+        *, status: str, scenario_lens: Mapping[str, object],
+        daily_brief: Mapping[str, object],
+    ) -> dict:
+        """Bind the canvas to existing stable scenario items without inferring pairs or edges."""
+
+        chapters = []
+        for scenario in scenario_lens["scenarios"]:
+            before_ids = [str(item["item_id"]) for item in scenario["before"]]
+            after_ids = [str(item["item_id"]) for item in scenario["after"]]
+            delta_ids = before_ids + after_ids
+            relationship_ids = (
+                [str(item["edge_id"]) for item in scenario["relationships"]]
+                if scenario["relationship_mode"] == "VERIFIED_FLOW"
+                else []
+            )
+            focused_items = list(scenario["before"]) + list(scenario["after"])
+            summary = {
+                "added_items": sum(item["change"] == "ADDED" for item in focused_items),
+                "removed_items": sum(item["change"] == "REMOVED" for item in focused_items),
+                "changed_items": sum(
+                    item["change"] not in {"ADDED", "REMOVED"}
+                    for item in focused_items
+                ),
+            }
+            chapter_id = f"canvas-chapter:{str(scenario['scenario_id']).split(':', 1)[1]}"
+            chapters.append({
+                "chapter_id": chapter_id,
+                "scenario_id": str(scenario["scenario_id"]),
+                "order": int(scenario["order"]),
+                "title_zh": str(scenario["title_zh"]),
+                "question_zh": str(scenario["question_zh"]),
+                "change_shape": str(scenario["change_shape"]),
+                "relationship_mode": str(scenario["relationship_mode"]),
+                "before_item_ids": before_ids,
+                "delta_item_ids": delta_ids,
+                "after_item_ids": after_ids,
+                "relationship_ids": relationship_ids,
+                "default_focus_item_id": (
+                    after_ids[0] if after_ids else before_ids[0] if before_ids else None
+                ),
+                "summary": summary,
+                "boundary_note_zh": (
+                    "只绘制本场景中明确列出的结构关系；画布位置不代表额外调用。"
+                    if scenario["relationship_mode"] == "VERIFIED_FLOW"
+                    else "这些对象是回答同一问题的并列事实；画布不绘制方向箭头。"
+                ),
+            })
+        primary_scenario_id = str(scenario_lens["primary_scenario_id"])
+        primary = next(item for item in chapters if item["scenario_id"] == primary_scenario_id)
+        primary_scenario = next(
+            item for item in scenario_lens["scenarios"]
+            if item["scenario_id"] == primary_scenario_id
+        )
+
+        def unique_labels(items: Sequence[Mapping[str, object]]) -> list[str]:
+            labels: list[str] = []
+            for item in items:
+                label = str(item["business_label_zh"])
+                if label not in labels:
+                    labels.append(label)
+            return labels
+
+        before_labels = unique_labels(primary_scenario["before"])
+        after_labels = unique_labels(primary_scenario["after"])
+        common_labels = [item for item in before_labels if item in after_labels]
+        old_only = [item for item in before_labels if item not in after_labels]
+        new_only = [item for item in after_labels if item not in before_labels]
+        before_change = {
+            str(item["business_label_zh"]): str(item["change"])
+            for item in primary_scenario["before"]
+        }
+        after_change = {
+            str(item["business_label_zh"]): str(item["change"])
+            for item in primary_scenario["after"]
+        }
+        removed_labels = [
+            item for item in old_only if before_change.get(item) == "REMOVED"
+        ]
+        added_labels = [
+            item for item in new_only if after_change.get(item) == "ADDED"
+        ]
+
+        def joined(labels: Sequence[str], empty: str) -> str:
+            if not labels:
+                return empty
+            suffix = "等" if len(labels) > 2 else ""
+            return "、".join(labels[:2]) + suffix
+
+        def lane_summary(
+            exclusive: Sequence[str], common: Sequence[str], empty: str
+        ) -> str:
+            if exclusive and common:
+                return f"{joined(exclusive, empty)}；{joined(common, empty)}保持"
+            if exclusive:
+                return joined(exclusive, empty)
+            if common:
+                return f"{joined(common, empty)}保持，内部实现重组"
+            return empty
+
+        title = str(primary["title_zh"])
+        shape = str(primary["change_shape"])
+        if shape == "ADDED":
+            verdict = f"新增「{title}」：{joined(after_labels, '形成新的业务能力')}"
+        elif shape == "REMOVED":
+            verdict = f"移除「{title}」：{joined(before_labels, '原有能力退出')}"
+        elif removed_labels and added_labels:
+            verdict = f"「{title}」：移除“{removed_labels[0]}”，新增“{added_labels[0]}”"
+        elif old_only and new_only:
+            verdict = f"「{title}」：旧版突出“{old_only[0]}”，新版突出“{new_only[0]}”"
+        elif added_labels:
+            verdict = f"「{title}」保留原职责，并新增“{added_labels[0]}”"
+        elif removed_labels:
+            verdict = f"「{title}」保留原职责，并移除“{removed_labels[0]}”"
+        elif new_only:
+            verdict = f"「{title}」出现新的聚焦项“{new_only[0]}”"
+        elif old_only:
+            verdict = f"「{title}」不再聚焦“{old_only[0]}”"
+        elif common_labels:
+            verdict = f"「{title}」职责仍在，但相关实现已重新组织"
+        else:
+            verdict = f"「{title}」的实现结构已调整"
+        first_check = daily_brief["checks"][0]
+        impact = str(daily_brief["why_it_matters_zh"])
+        impact = impact.split("；完整符号", 1)[0].removeprefix("直接影响 ")
+        verify = (
+            f"在 Unity 中走一遍“{new_only[0]}”，确认结果符合预期。"
+            if new_only else str(first_check["action_zh"])
+        )
+        capsule = {
+            "read_time_seconds": 10,
+            "verdict_zh": verdict,
+            "before_zh": lane_summary(
+                old_only, common_labels, "没有进入聚焦层的旧版能力"
+            ),
+            "after_zh": lane_summary(
+                new_only, common_labels, "没有进入聚焦层的新版能力"
+            ),
+            "impact_zh": impact,
+            "verify_zh": verify.replace("PARTIAL", "当前证据边界"),
+        }
+        verification_mission = ChangeStoryBuilder._verification_mission(
+            status=status,
+            primary_scenario=primary_scenario,
+            scenario_lens=scenario_lens,
+            daily_brief=daily_brief,
+            capsule=capsule,
+        )
+        capsule["verify_zh"] = verification_mission["steps"][0]["action_zh"]
+        return {
+            "default_view": "DELTA",
+            "primary_chapter_id": str(primary["chapter_id"]),
+            "summary": dict(primary["summary"]),
+            "capsule": capsule,
+            "verification_mission": verification_mission,
+            "partial_note_zh": (
+                "PARTIAL：当前画布只覆盖已变更 C# 文件；未变更依赖、完整程序集和运行时绑定尚未确认。"
+                if status == "PARTIAL"
+                else "FRESH：分析上下文完整；实际运行表现仍需通过目标环境验证。"
+            ),
+            "chapters": chapters,
+        }
+
+    @staticmethod
+    def _verification_mission(
+        *,
+        status: str,
+        primary_scenario: Mapping[str, object],
+        scenario_lens: Mapping[str, object],
+        daily_brief: Mapping[str, object],
+        capsule: Mapping[str, object],
+    ) -> dict:
+        """Turn evidence-backed checks into a short guided task with observable success."""
+
+        checks = list(daily_brief["checks"])
+        takeaways_zh = list(scenario_lens["takeaways_zh"])
+        takeaways_en = list(scenario_lens["takeaways_en"])
+        primary_zh = takeaways_zh[0]
+        primary_en = takeaways_en[0]
+        selected_items = list(primary_scenario["after"]) + list(primary_scenario["before"])
+        primary_area = str(selected_items[0]["area"]) if selected_items else "CLIENT"
+        first_actions = {
+            "EDITOR": (
+                f"打开 Unity 中与「{primary_scenario['title_zh']}」相关的工具窗口，选择一份真实数据并触发“{primary_zh}”。",
+                f'Open the Unity tool for “{primary_scenario["title_en"]}”, select real data, and trigger “{primary_en}”.',
+            ),
+            "CONFIGURATION": (
+                f"准备一份最小真实配置，执行一次与“{primary_zh}”对应的保存或导出流程。",
+                f'Prepare a minimal real configuration and run the save or export flow for “{primary_en}”.',
+            ),
+            "TEST": (
+                f"运行与“{primary_zh}”直接相关的最小测试用例。",
+                f'Run the smallest test case directly related to “{primary_en}”.',
+            ),
+        }
+        first_action_zh, first_action_en = first_actions.get(
+            primary_area,
+            (
+                f"在目标环境触发一次与“{primary_zh}”对应的真实流程。",
+                f'Trigger one real target-environment workflow for “{primary_en}”.',
+            ),
+        )
+        success_by_kind = {
+            "PRIMARY_BEHAVIOR": (
+                f"实际结果体现“{primary_zh}”，并且 Unity 控制台没有新增错误。",
+                f'The observed result reflects “{primary_en}” and the Unity Console shows no new errors.',
+            ),
+            "SECONDARY_BEHAVIOR": (
+                "边界操作没有产生异常、错误数据或意外状态变化。",
+                "The boundary interaction produces no exception, invalid data, or unexpected state change.",
+            ),
+            "RELATIONSHIP_PATH": (
+                "输入、判断和最终表现与已证实关系一致，没有中断或顺序异常。",
+                "Input, decisions, and presentation match the verified relationships without interruption or ordering errors.",
+            ),
+            "EVIDENCE_BOUNDARY": (
+                "目标 Unity 工程编译通过，实际操作结果与 Change Capsule 描述一致。",
+                "The target Unity project compiles and the observed behavior matches the Change Capsule.",
+            ),
+            "REGRESSION": (
+                "相邻流程仍可完成，且没有出现本次修改引入的新错误。",
+                "The adjacent workflow still completes without a new error introduced by this change.",
+            ),
+        }
+        steps = []
+        for index, check in enumerate(checks[:3], start=1):
+            success_zh, success_en = success_by_kind[str(check["kind"])]
+            steps.append({
+                "step_id": f"mission-step:{index}",
+                "order": index,
+                "action_zh": (
+                    first_action_zh if index == 1 else str(check["action_zh"])
+                ),
+                "action_en": (
+                    first_action_en if index == 1 else str(check["action_en"])
+                ),
+                "success_zh": success_zh,
+                "success_en": success_en,
+                "evidence_refs": list(check["evidence_refs"]),
+            })
+        title_zh = str(primary_scenario["title_zh"])
+        title_en = str(primary_scenario["title_en"])
+        return {
+            "mission_id": "verification-mission:primary-change",
+            "title_zh": f"验证「{title_zh}」",
+            "title_en": f"Verify {title_en}",
+            "goal_zh": f"用一次真实操作确认：{capsule['verdict_zh']}",
+            "goal_en": f"Use a real workflow to confirm: {daily_brief['what_changed_en']}",
+            "estimated_minutes": min(5, max(1, len(steps))),
+            "state": "PARTIAL" if status == "PARTIAL" else "SUGGESTED",
+            "first_step_id": "mission-step:1",
+            "steps": steps,
+            "completion_zh": "所有步骤的成功标志均出现，且 Unity 控制台没有新增错误时，任务完成。",
+            "completion_en": "The mission is complete when every success signal is observed and the Unity Console shows no new errors.",
+            "boundary_zh": (
+                "这是基于语法局部证据生成的建议任务；完成前不能视为运行时已验证。"
+                if status == "PARTIAL"
+                else "这是建议验证任务；只有实际完成步骤后，才能确认运行表现。"
+            ),
+            "boundary_en": (
+                "This suggested mission is based on syntax-partial evidence and does not prove runtime behavior until completed."
+                if status == "PARTIAL"
+                else "This is a suggested verification mission; runtime behavior is confirmed only after the steps are completed."
+            ),
+        }
 
     def _daily_brief(
         self,
@@ -334,7 +607,7 @@ class ChangeStoryBuilder:
             checks.append({
                 "check_id": "daily-check:partial",
                 "kind": "EVIDENCE_BOUNDARY",
-                "action_zh": "在目标 Unity 环境完成编译和实际运行验证，补齐当前 PARTIAL 证据边界。",
+                "action_zh": "在目标 Unity 环境完成编译和实际运行验证，补齐当前证据边界。",
                 "action_en": "Compile and exercise the change in the target Unity environment to close the current PARTIAL evidence boundary.",
                 "evidence_refs": [str(analysis["canonical_digest"])],
             })
@@ -1000,12 +1273,17 @@ class ChangeStoryBuilder:
                 ("attackcdready", "确认冷却覆盖完整时间轴", "Confirm cooldown covers the full timeline"),
             ),
             "authoring": (
+                ("resolvepretime", "计算攻击前摇时间", "Calculate attack anticipation time"),
+                ("resolveanchor", "按锚点计算攻击位置", "Resolve attack position from anchors"),
                 ("template", "用模板生成初始技能", "Create initial skill data from a template"),
                 ("duplicate", "复制可独立编辑的数据", "Duplicate independently editable data"),
                 ("allocate", "分配新的配置标识", "Allocate new configuration identifiers"),
                 ("addcomplete", "创建一套完整技能", "Create a complete skill"),
                 ("addstep", "增加一个攻击步骤", "Add an attack step"),
                 ("create", "创建并组装技能数据", "Create and assemble skill data"),
+                ("validate", "校验技能步骤", "Validate skill steps"),
+                ("write", "写回技能配置数据", "Write skill configuration data"),
+                ("read", "读取已有技能配置", "Read existing skill configuration"),
             ),
             "validation": (
                 ("autofix", "修复能够确定的问题", "Repair deterministic issues"),
@@ -1828,11 +2106,20 @@ class ChangeStoryBuilder:
 
 
 class HtmlChangeStoryRenderer:
-    """Render a self-contained, script-free scenario-first Chinese report."""
+    """Render a self-contained, script-free Chinese Change Canvas."""
 
-    def render(self, story: Mapping[str, object], *, repository_root: str | os.PathLike[str] | None = None) -> str:
-        if story.get("schema_version") != "1.5.0" or story.get("language") != "zh-CN":
+    def render(
+        self,
+        story: Mapping[str, object],
+        *,
+        repository_root: str | os.PathLike[str] | None = None,
+    ) -> str:
+        """Render the v1.7 Change Canvas with a first-action verification mission."""
+
+        if story.get("schema_version") != "1.7.0" or story.get("language") != "zh-CN":
             raise ValueError("unsupported Change Story")
+        esc = lambda value: html.escape(str(value), quote=True)
+        body_esc = lambda value: esc(str(value).replace("PARTIAL", "当前证据边界"))
         repo = Path(repository_root).resolve() if repository_root is not None else None
         revisions = story.get("revisions")
         new_binding = revisions.get("new") if isinstance(revisions, Mapping) else None
@@ -1840,23 +2127,12 @@ class HtmlChangeStoryRenderer:
             isinstance(new_binding, Mapping)
             and (new_binding.get("revision") == "WORKTREE" or new_binding.get("dirty") is True)
         )
-        esc = lambda value: html.escape(str(value), quote=True)
-        status = esc(story["status"])
-        overview = story["overview"]
-        counts = overview["counts"]
-        quick = story["quick_view"]
-        visual = story["visual_map"]
+        canvas = story["change_canvas"]
+        mission = canvas["verification_mission"]
         scenario_lens = story["scenario_lens"]
-        daily = story["daily_brief"]
-        primary_scenario = next(
-            item for item in scenario_lens["scenarios"]
-            if item["scenario_id"] == scenario_lens["primary_scenario_id"]
-        )
-        deep = story["deep_dive"]
-        claims = story["claims"]
-        facts = [item for item in claims if item["layer"] == "CODE_FACT"]
-        sources = [item for item in claims if item["layer"] == "SOURCE_EVIDENCE"]
-        inferences = [item for item in claims if item["layer"] == "INTENT_INFERENCE"]
+        scenarios = {
+            str(item["scenario_id"]): item for item in scenario_lens["scenarios"]
+        }
 
         def source_location(item: Mapping[str, object]) -> str:
             label = f"{item['path']}:{item['start_line']}"
@@ -1867,352 +2143,314 @@ class HtmlChangeStoryRenderer:
                 candidate.relative_to(repo)
             except ValueError:
                 return f'<span class="location">{esc(label)}</span>'
-            return f'<a class="location" href="{esc(candidate.as_uri())}#L{item["start_line"]}">{esc(label)}</a>'
-
-        def location(node: Mapping[str, object]) -> str:
-            return source_location(node["location"])
-
-        def evidence_details(evidence_refs: Sequence[object], locations: Sequence[Mapping[str, object]] = ()) -> str:
-            links = "".join(source_location(item) for item in locations)
             return (
-                '<details class="evidence"><summary>查看代码证据</summary>'
-                f'{links}<code>{esc(", ".join(str(item) for item in evidence_refs))}</code></details>'
+                f'<a class="location" href="{esc(candidate.as_uri())}#L{item["start_line"]}">'
+                f'{esc(label)}</a>'
             )
 
-        def quick_cards() -> str:
-            if not quick["change_cards"]:
-                return '<p class="empty">没有可聚焦的业务变化。</p>'
-            return "".join(
-                f'<article class="change-card area-{esc(item["area"].lower())}">'
-                f'<div class="card-icon">{esc(item["icon"])}</div><div><h3>{esc(item["title_zh"])}</h3>'
-                f'<p>{esc(item["summary_zh"])}</p><small>{esc(item["title_en"])}</small>'
-                f'{evidence_details(item["evidence_refs"], item["locations"])}</div></article>'
-                for item in quick["change_cards"]
-            )
+        change_symbol = {
+            "ADDED": "+",
+            "REMOVED": "−",
+            "UPDATED": "∆",
+            "MOVED": "↗",
+            "RENAMED": "Aa",
+            "RENAMED_AND_MOVED": "↗",
+            "CONTEXT": "·",
+        }
 
-        def visual_items(items: Sequence[Mapping[str, object]]) -> str:
-            return "".join(
-                f'<article class="map-item change-{esc(str(item["change"]).lower())}">'
-                f'<strong>{esc(item["label_zh"])}</strong>'
-                f'<small>{esc(item["confidence"])}</small>'
-                f'{evidence_details(item["evidence_refs"], item["locations"])}</article>'
-                for item in items
-            )
-
-        def map_connector() -> str:
-            if visual["relationship_mode"] == "VERIFIED_FLOW":
-                return '<div class="map-connector transition" aria-label="版本变化，不表示调用">⇒</div>'
-            return '<div class="map-connector parallel" aria-label="并列事实，不表示调用">•••</div>'
-
-        def flow_steps(items: Sequence[Mapping[str, object]], empty: str) -> str:
-            if not items:
-                return f'<p class="empty">{esc(empty)}</p>'
-            rendered = []
-            for index, item in enumerate(items):
-                if index:
-                    rendered.append('<div class="flow-arrow">↓</div>')
-                rendered.append(
-                    f'<article class="flow-step change-{esc(item["change"].lower())}">'
-                    f'<span class="step-number">{item["order"]}</span><div><small>{esc(item["area_label_zh"])}</small>'
-                    f'<strong>{esc(item["label"])}</strong>'
-                    f'<span>{esc(_CHANGE_ZH.get(item["change"], item["change"]))} · {esc(item["confidence"])}</span>'
-                    f'{source_location(item["location"])}</div></article>'
-                )
-            return "".join(rendered)
-
-        def risk_cards() -> str:
-            if not quick["risk_cards"]:
-                return '<p class="empty">没有自动提取到需要突出显示的风险。</p>'
-            return "".join(
-                f'<article class="risk risk-{esc(item["level"].lower())}"><span>{esc(item["level"])}</span>'
-                f'<div><strong>{esc(item["title_zh"])}</strong><p>{esc(item["description_zh"])}</p></div></article>'
-                for item in quick["risk_cards"]
-            )
-
-        def takeaway_cards() -> str:
-            return "".join(
-                f'<article class="takeaway"><span>{index:02d}</span><div>'
-                f'<strong>{esc(zh)}</strong><small>{esc(en)}</small></div></article>'
-                for index, (zh, en) in enumerate(
-                    zip(scenario_lens["takeaways_zh"], scenario_lens["takeaways_en"]),
-                    start=1,
-                )
-            )
-
-        def daily_checks() -> str:
-            labels = {
-                "PRIMARY_BEHAVIOR": "先确认主体验",
-                "SECONDARY_BEHAVIOR": "再确认边界",
-                "RELATIONSHIP_PATH": "沿路径核对",
-                "EVIDENCE_BOUNDARY": "补齐证据",
-                "REGRESSION": "回归相邻流程",
-            }
-            return "".join(
-                f'<article class="daily-check"><span class="check-box">{index}</span><div>'
-                f'<small>{esc(labels[item["kind"]])}</small><strong>{esc(item["action_zh"])}</strong>'
-                f'{evidence_details(item["evidence_refs"])}</div></article>'
-                for index, item in enumerate(daily["checks"], start=1)
-            )
-
-        def scenario_item(item: Mapping[str, object]) -> str:
+        def node_markup(
+            item: Mapping[str, object], focus_id: str, *, role: str, compact: bool = False
+        ) -> str:
+            classes = [
+                "canvas-node",
+                f'change-{str(item["change"]).lower()}',
+                f'role-{role.lower()}',
+            ]
+            if compact:
+                classes.append("compact")
             return (
-                f'<article class="scenario-item change-{esc(str(item["change"]).lower())}" '
-                f'id="{esc(item["item_id"])}"><strong>{esc(item["business_label_zh"])}</strong>'
-                f'<small>{esc(item["business_label_en"])}</small>'
-                f'<details class="evidence"><summary>查看技术名称与证据</summary>'
-                f'<code>{esc(item["technical_label"])}</code>{source_location(item["location"])}'
-                f'<code>{esc(", ".join(str(ref) for ref in item["evidence_refs"]))}</code></details></article>'
+                f'<label class="{" ".join(classes)}" for="{focus_id}">'
+                f'<span class="node-symbol">{esc(change_symbol.get(str(item["change"]), "∆"))}</span>'
+                f'<span class="node-copy"><strong>{esc(item["business_label_zh"])}</strong>'
+                f'<small>{esc(item["technical_label"])}</small></span>'
+                f'<span class="node-change">{esc(_CHANGE_ZH.get(item["change"], item["change"]))}</span>'
+                f'</label>'
             )
 
-        def scenario_views() -> tuple[str, str]:
-            scenarios = scenario_lens["scenarios"]
-            inputs = []
-            labels = []
-            panels = []
-            selectors = []
-            for index, scenario in enumerate(scenarios):
-                control_id = f"scenario-view-{index}"
-                inputs.append(
-                    f'<input class="scenario-input" type="radio" name="scenario-view" id="{control_id}"'
-                    f'{" checked" if index == 0 else ""}>'
+        def relation_markup(
+            scenario: Mapping[str, object], item_by_id: Mapping[str, Mapping[str, object]],
+            allowed_ids: set[str], visible_item_ids: set[str] | None = None,
+        ) -> str:
+            if scenario["relationship_mode"] != "VERIFIED_FLOW":
+                return (
+                    '<div class="parallel-boundary"><span>≡</span><div><strong>并列事实</strong>'
+                    '<p>这些对象共同回答本章问题，但没有证据证明它们按画布顺序调用。</p></div></div>'
                 )
-                labels.append(
-                    f'<label for="{control_id}"><span>{esc(scenario["icon"])}</span>'
-                    f'{esc(scenario["title_zh"])}</label>'
-                )
-                shape = str(scenario["change_shape"])
-                before = "".join(scenario_item(item) for item in scenario["before"])
-                after = "".join(scenario_item(item) for item in scenario["after"])
-                if shape == "ADDED":
-                    comparison = (
-                        '<div class="scenario-transition transition-added">'
-                        '<span><small>原来</small>没有这组聚焦能力</span><b aria-hidden="true">→</b>'
-                        '<span><small>现在</small>形成新的工作场景</span></div>'
-                        f'<div class="scenario-single"><h4>新增能力 / ADDED</h4>'
-                        f'<div class="scenario-item-grid">{after}</div></div>'
-                    )
-                elif shape == "REMOVED":
-                    comparison = (
-                        '<div class="scenario-transition transition-removed">'
-                        '<span><small>原来</small>存在这组聚焦能力</span><b aria-hidden="true">→</b>'
-                        '<span><small>现在</small>已从场景中移除</span></div>'
-                        f'<div class="scenario-single removed"><h4>移除能力 / REMOVED</h4>'
-                        f'<div class="scenario-item-grid">{before}</div></div>'
-                    )
-                else:
-                    before_content = before or '<p class="empty">没有旧版聚焦证据。</p>'
-                    after_content = after or '<p class="empty">没有新版聚焦证据。</p>'
-                    comparison = (
-                        f'<div class="scenario-compare"><div><h4>原来 / BEFORE</h4>{before_content}</div>'
-                        f'<div><h4>现在 / AFTER</h4>{after_content}</div></div>'
-                    )
-                item_lookup = {
-                    str(item["item_id"]): item
-                    for item in scenario["before"] + scenario["after"]
-                }
-                relationships = "".join(
-                    f'<article class="route-row"><span class="route-node">'
-                    f'{esc(item_lookup[item["source_item_id"]]["business_label_zh"])}</span>'
-                    f'<span class="route-edge"><small>{esc(item["relation_zh"])}</small>'
-                    f'<b aria-hidden="true">→</b></span><span class="route-node">'
-                    f'{esc(item_lookup[item["target_item_id"]]["business_label_zh"])}</span>'
-                    f'<span class="route-confidence">{esc(item["confidence"])}</span></article>'
-                    for item in scenario["relationships"]
-                )
-                relationship_note = (
-                    "下列关系由变化图中的明确边支持；对象顺序仍以关系证据为准。"
-                    if scenario["relationship_mode"] == "VERIFIED_FLOW"
-                    else "这些是回答同一问题的并列事实，不表示按显示顺序相互调用。"
-                )
-                relation_block = (
-                    f'<div class="scenario-routes"><h4>已证实的关系路径 <small>VERIFIED PATHS</small></h4>'
-                    f'{relationships}</div>' if relationships else ""
-                )
-                panels.append(
-                    f'<section class="scenario-panel" data-scenario-index="{index}" '
-                    f'data-scenario-shape="{esc(shape)}">'
-                    f'<div class="scenario-heading"><div class="scenario-question"><span>要回答的问题 / QUESTION</span>'
-                    f'<strong>{esc(scenario["question_zh"])}</strong>'
-                    f'<p>{esc(scenario["answer_zh"])}</p></div>'
-                    f'<span class="scenario-shape shape-{esc(shape.lower())}">{esc(shape)}</span></div>'
-                    f'{comparison}'
-                    f'<p class="scenario-note">{esc(relationship_note)}</p>{relation_block}</section>'
-                )
-                selectors.append(
-                    f'#{control_id}:checked~.scenario-nav label[for={control_id}]'
-                    f'{{background:var(--blue);color:white;border-color:var(--blue)}}'
-                    f'#{control_id}:checked~.scenario-panels .scenario-panel[data-scenario-index="{index}"]'
-                    f'{{display:block}}'
-                )
-            markup = (
-                f'{"".join(inputs)}<nav class="scenario-nav">{"".join(labels)}</nav>'
-                f'<div class="scenario-panels">{"".join(panels)}</div>'
-            )
-            return markup, "".join(selectors)
-
-        scenario_markup, scenario_css = scenario_views()
-
-        def stages() -> str:
-            if not deep["stages"]:
-                return '<p class="empty">没有可拆解的实现阶段。</p>'
-            rendered = []
-            for stage in deep["stages"]:
-                items = "".join(
-                    f'<li><span class="badge change-{esc(item["change"].lower())}">'
-                    f'{esc(_CHANGE_ZH.get(item["change"], item["change"]))}</span> '
-                    f'<strong>{esc(item["label"])}</strong>{location(item)}</li>'
-                    for item in stage["items"]
-                )
-                relationships = "".join(
-                    f'<li><strong>{esc(item["source_label"])}</strong> '
-                    f'<span class="relation">—{esc(item["relation_zh"])}→</span> '
-                    f'<strong>{esc(item["target_label"])}</strong> '
-                    f'<small>{esc(item["confidence"])}</small></li>'
-                    for item in stage["relationships"]
-                ) or '<li class="empty">没有进入聚焦视图的直接关系；可在技术证据中继续查看。</li>'
-                rendered.append(
-                    f'<details class="stage"><summary><span class="stage-number">{stage["order"]}</span>'
-                    f'<span class="stage-icon">{esc(stage["icon"])}</span><span><strong>{esc(stage["title_zh"])}</strong>'
-                    f'<small>{esc(stage["summary_zh"])}</small></span></summary>'
-                    f'<div class="stage-body"><div><h4>重点对象</h4><ul>{items}</ul></div>'
-                    f'<div><h4>关键关系</h4><ul>{relationships}</ul></div></div></details>'
-                )
-            return "".join(rendered)
-
-        def decisions() -> str:
-            if not deep["decision_points"]:
-                return '<p class="empty">没有提取到新增判断或退出点。</p>'
-            return "".join(
-                f'<article class="decision"><div class="decision-mark">◇</div><div>'
-                f'<strong>{esc(item["statement_zh"])}</strong><small>{esc(item["relation"])} · {esc(item["confidence"])}</small>'
-                f'{source_location(item["location"])}</div></article>'
-                for item in deep["decision_points"]
-            )
-
-        def claim_cards(items: Sequence[Mapping[str, object]], empty: str) -> str:
-            if not items:
-                return f'<p class="empty">{esc(empty)}</p>'
-            return "".join(
-                f'<article class="claim {esc(item["layer"].lower())}">'
-                f'<div class="claim-tag">{esc(item["layer"])} · {esc(item["confidence"])}</div>'
-                f'<p>{esc(item["statement_zh"])}</p><small>{esc(item["statement_en"])}</small>'
-                f'{evidence_details(item["evidence_refs"])}</article>' for item in items
-            )
-
-        def chain_cards(lane: Mapping[str, object]) -> str:
-            chains = lane["chains"]
-            if not chains:
-                return '<p class="empty">该版本没有可聚焦的变更关系。</p>'
-            rendered = []
-            for chain in chains:
-                pieces = []
-                for index, node in enumerate(chain["nodes"]):
-                    if index:
-                        relation = chain["relations"][index - 1]
-                        pieces.append(
-                            f'<div class="arrow"><span>{esc(relation["relation_zh"])}</span>'
-                            f'<small>{esc(relation["change"])} · {esc(relation["confidence"])}</small></div>'
-                        )
-                    pieces.append(
-                        f'<div class="chain-node change-{esc(node["change"].lower())}">'
-                        f'<strong>{esc(node["label"])}</strong>'
-                        f'<span>{esc(node["kind"])} · {esc(_CHANGE_ZH.get(node["change"], node["change"]))}</span>'
-                        f'{location(node)}</div>'
-                    )
-                rendered.append(f'<article class="chain" id="{esc(chain["chain_id"])}">{"".join(pieces)}</article>')
-            return "".join(rendered)
-
-        def change_rows() -> str:
-            if not story["changes"]:
-                return '<tr><td colspan="4" class="empty">没有符号级变化。</td></tr>'
             rows = []
-            for item in story["changes"]:
-                locations = " → ".join(f"{entry['path']}:{entry['start_line']}" for entry in item["locations"])
+            for relation in scenario["relationships"]:
+                if str(relation["edge_id"]) not in allowed_ids:
+                    continue
+                if visible_item_ids is not None and not {
+                    str(relation["source_item_id"]), str(relation["target_item_id"])
+                }.issubset(visible_item_ids):
+                    continue
+                source = item_by_id.get(str(relation["source_item_id"]))
+                target = item_by_id.get(str(relation["target_item_id"]))
+                if source is None or target is None:
+                    continue
                 rows.append(
-                    f'<tr><td><span class="badge change-{esc(item["kind"].lower())}">'
-                    f'{esc(_CHANGE_ZH.get(item["kind"], item["kind"]))}</span></td>'
-                    f'<td>{esc(item["subject_zh"])}</td><td>{esc(item["confidence"])}</td>'
-                    f'<td><code>{esc(locations)}</code></td></tr>'
+                    '<div class="verified-route">'
+                    f'<span>{esc(source["business_label_zh"])}</span>'
+                    f'<b><small>{esc(relation["relation_zh"])}</small>→</b>'
+                    f'<span>{esc(target["business_label_zh"])}</span>'
+                    f'<em>{esc(relation["confidence"])}</em></div>'
                 )
-            return "".join(rows)
+            if not rows:
+                return (
+                    '<div class="parallel-boundary"><span>?</span><div><strong>暂无可画关系</strong>'
+                    '<p>节点有变更证据，但本章没有可用于连线的明确关系边。</p></div></div>'
+                )
+            return '<div class="verified-routes"><div class="route-title">已证实关系</div>' + "".join(rows) + "</div>"
 
-        limitations = "".join(f"<li>{esc(item)}</li>" for item in story["limitations"])
+        chapter_inputs: list[str] = []
+        chapter_labels: list[str] = []
+        chapter_panels: list[str] = []
+        chapter_css: list[str] = []
+        focus_css: list[str] = []
+        primary_chapter_id = str(canvas["primary_chapter_id"])
+        primary_chapter = next(
+            item for item in canvas["chapters"]
+            if str(item["chapter_id"]) == primary_chapter_id
+        )
+        capsule = canvas["capsule"]
+        for chapter_index, chapter in enumerate(canvas["chapters"]):
+            chapter_control = f"canvas-chapter-{chapter_index}"
+            is_primary = str(chapter["chapter_id"]) == primary_chapter_id
+            chapter_inputs.append(
+                f'<input class="canvas-radio" type="radio" name="canvas-chapter" '
+                f'id="{chapter_control}"{" checked" if is_primary else ""}>'
+            )
+            chapter_labels.append(
+                f'<label class="chapter-step" for="{chapter_control}"><span>{chapter_index + 1:02d}</span>'
+                f'<strong>{esc(chapter["title_zh"])}</strong></label>'
+            )
+            chapter_css.append(
+                f'#{chapter_control}:checked~.canvas-workspace .chapter-step[for="{chapter_control}"]'
+                '{color:var(--ink);border-color:var(--blue);background:var(--blue-soft)}'
+                f'#{chapter_control}:checked~.canvas-workspace .canvas-chapter[data-chapter="{chapter_index}"]'
+                '{display:block}'
+                f'#{chapter_control}:focus-visible~.canvas-workspace .chapter-step[for="{chapter_control}"]'
+                '{outline:3px solid var(--focus);outline-offset:2px}'
+            )
+            scenario = scenarios[str(chapter["scenario_id"])]
+            all_items = list(scenario["before"]) + list(scenario["after"])
+            item_by_id = {str(item["item_id"]): item for item in all_items}
+            focus_ids: dict[str, str] = {}
+            focus_inputs: list[str] = []
+            passports: list[str] = []
+            for item_index, item in enumerate(all_items):
+                item_id = str(item["item_id"])
+                focus_control = f"canvas-focus-{chapter_index}-{item_index}"
+                focus_ids[item_id] = focus_control
+                focus_inputs.append(
+                    f'<input class="canvas-radio" type="radio" name="canvas-focus-{chapter_index}" '
+                    f'id="{focus_control}"'
+                    f'{" checked" if item_id == chapter["default_focus_item_id"] else ""}>'
+                )
+                focus_css.append(
+                    f'#{focus_control}:checked~.canvas-chapter-shell '
+                    f'.canvas-passport[data-focus="{focus_control}"]{{display:block}}'
+                    f'#{focus_control}:checked~.canvas-chapter-shell label[for="{focus_control}"]'
+                    '{outline:3px solid var(--focus);outline-offset:2px}'
+                )
+                passports.append(
+                    f'<article class="canvas-passport" data-focus="{focus_control}">'
+                    f'<div class="passport-kicker">语义护照 · {esc(item["area"])} · {esc(item["confidence"])}</div>'
+                    f'<h3>{esc(item["business_label_zh"])}</h3>'
+                    f'<p class="passport-tech">{esc(item["technical_label"])}</p>'
+                    f'<div class="passport-facts"><span>版本侧<b>{esc(item["role"])}</b></span>'
+                    f'<span>变化<b>{esc(_CHANGE_ZH.get(item["change"], item["change"]))}</b></span></div>'
+                    f'{source_location(item["location"])}'
+                    '<details><summary>查看证据标识</summary>'
+                    f'<code>{esc(", ".join(str(ref) for ref in item["evidence_refs"]))}</code></details>'
+                    '</article>'
+                )
+
+            def render_ids(ids: Sequence[object], role: str) -> str:
+                items = [
+                    node_markup(item_by_id[str(item_id)], focus_ids[str(item_id)], role=role)
+                    for item_id in ids if str(item_id) in item_by_id
+                ]
+                return "".join(items) or '<p class="scene-empty">这一侧没有进入聚焦层的变更证据。</p>'
+
+            before_nodes = render_ids(chapter["before_item_ids"], "old")
+            after_nodes = render_ids(chapter["after_item_ids"], "new")
+            allowed_relation_ids = {str(item) for item in chapter["relationship_ids"]}
+            before_item_ids = {str(item) for item in chapter["before_item_ids"]}
+            after_item_ids = {str(item) for item in chapter["after_item_ids"]}
+            before_relations = relation_markup(
+                scenario, item_by_id, allowed_relation_ids, before_item_ids
+            )
+            delta_relations = relation_markup(
+                scenario, item_by_id, allowed_relation_ids, before_item_ids | after_item_ids
+            )
+            after_relations = relation_markup(
+                scenario, item_by_id, allowed_relation_ids, after_item_ids
+            )
+            empty_passport = (
+                '<article class="canvas-passport empty-passport"><div class="passport-kicker">语义护照</div>'
+                '<h3>没有可聚焦节点</h3><p>当前变化只有边界信息；请展开下方技术证据核对。</p></article>'
+                if not passports else ""
+            )
+            chapter_panels.append(
+                f'<section class="canvas-chapter" data-chapter="{chapter_index}" '
+                f'data-change-shape="{esc(chapter["change_shape"])}" '
+                f'data-relationship-mode="{esc(chapter["relationship_mode"])}">'
+                f'{"".join(focus_inputs)}<div class="canvas-chapter-shell">'
+                '<div class="canvas-main"><div class="chapter-heading">'
+                f'<div><span>第 {chapter_index + 1} 章 · {esc(chapter["change_shape"])}</span>'
+                f'<h2>{esc(chapter["question_zh"])}</h2></div>'
+                f'<div class="mini-counts"><span>+{chapter["summary"]["added_items"]}</span>'
+                f'<span>−{chapter["summary"]["removed_items"]}</span>'
+                f'<span>∆{chapter["summary"]["changed_items"]}</span></div></div>'
+                '<div class="canvas-scene" data-canvas-view="BEFORE">'
+                f'<div class="scene-column"><div class="scene-label">原链路事实 · BEFORE</div>{before_nodes}</div>'
+                f'{before_relations}</div>'
+                '<div class="canvas-scene" data-canvas-view="DELTA">'
+                '<div class="delta-grid"><div class="scene-column old-zone"><div class="scene-label">原来 · OLD EVIDENCE</div>'
+                f'{before_nodes}</div><div class="delta-divider"><span>变化</span><b>→</b></div>'
+                f'<div class="scene-column new-zone"><div class="scene-label">现在 · NEW EVIDENCE</div>{after_nodes}</div></div>'
+                f'{delta_relations}</div>'
+                '<div class="canvas-scene" data-canvas-view="AFTER">'
+                f'<div class="scene-column"><div class="scene-label">新链路事实 · AFTER</div>{after_nodes}</div>'
+                f'{after_relations}</div>'
+                f'<p class="truth-boundary">证据边界：{esc(chapter["boundary_note_zh"])}</p></div>'
+                f'<aside class="passport-rail">{"".join(passports)}{empty_passport}</aside>'
+                '</div></section>'
+            )
+
+        first_mission_step = mission["steps"][0]
+        mission_followups = "".join(
+            '<li><span>{order}</span><div><strong>{action}</strong>'
+            '<small>成功标志：{success}</small></div></li>'.format(
+                order=item["order"],
+                action=body_esc(item["action_zh"]),
+                success=body_esc(item["success_zh"]),
+            )
+            for item in mission["steps"][1:]
+        )
+        mission_more = (
+            '<details class="mission-more"><summary>完成后查看后续步骤</summary>'
+            f'<ol class="action-list">{mission_followups}</ol></details>'
+            if mission_followups else ""
+        )
+        visible_impacts = list(story["impacts"])[:12]
         impacts = "".join(
-            f'<li><span class="badge change-{esc(item["change"].lower())}">{esc(_CHANGE_ZH[item["change"]])}</span> '
-            f'<strong>{esc(item["label"])}</strong> <small>{esc(item["kind"])} · '
-            f'{esc(item["location"]["path"])}:{item["location"]["start_line"]}</small></li>'
-            for item in story["impacts"]
-        ) or '<li class="empty">未发现状态、事件、类型或未知动态目标的直接增删影响。</li>'
+            f'<li><strong>{esc(item["label"])}</strong><small>{esc(item["kind"])} · '
+            f'{esc(_CHANGE_ZH.get(item["change"], item["change"]))}</small></li>'
+            for item in visible_impacts
+        ) or '<li>没有识别到直接状态或事件影响。</li>'
+        if len(story["impacts"]) > len(visible_impacts):
+            impacts += (
+                f'<li><strong>其余 {len(story["impacts"]) - len(visible_impacts)} 项</strong>'
+                '<small>保留在 change-story.json</small></li>'
+            )
+        visible_limitations = list(story["limitations"])[:16]
+        limitations = "".join(f'<li>{body_esc(item)}</li>' for item in visible_limitations)
+        if len(story["limitations"]) > len(visible_limitations):
+            limitations += (
+                f'<li>其余 {len(story["limitations"]) - len(visible_limitations)} 项已折叠；'
+                '完整内容保留在 change-story.json。</li>'
+            )
+        claims = "".join(
+            f'<article class="evidence-card"><span>{esc(item["layer"])} · {esc(item["confidence"])}</span>'
+            f'<p>{body_esc(item["statement_zh"])}</p><details><summary>证据标识</summary>'
+            f'<code>{esc(", ".join(str(ref) for ref in item["evidence_refs"]))}</code></details></article>'
+            for item in story["claims"]
+        ) or '<p>没有可展示的声明。</p>'
+        visible_changes = list(story["changes"])[:40]
+        changes = "".join(
+            f'<tr><td>{esc(_CHANGE_ZH.get(item["kind"], item["kind"]))}</td>'
+            f'<td>{esc(item["subject_zh"])}</td><td>{esc(item["confidence"])}</td></tr>'
+            for item in visible_changes
+        ) or '<tr><td colspan="3">没有符号级变化。</td></tr>'
+        if len(story["changes"]) > len(visible_changes):
+            changes += (
+                f'<tr><td colspan="3">其余 {len(story["changes"]) - len(visible_changes)} 项已折叠；'
+                '完整内容保留在 change-story.json。</td></tr>'
+            )
 
+        view_css = "".join(
+            f'#canvas-view-{view.lower()}:checked~.canvas-workspace '
+            f'.view-switch label[for="canvas-view-{view.lower()}"]'
+            '{background:var(--ink);color:white;border-color:var(--ink)}'
+            f'#canvas-view-{view.lower()}:checked~.canvas-workspace '
+            f'.canvas-scene[data-canvas-view="{view}"]{{display:grid}}'
+            f'#canvas-view-{view.lower()}:focus-visible~.canvas-workspace '
+            f'.view-switch label[for="canvas-view-{view.lower()}"]'
+            '{outline:3px solid var(--focus);outline-offset:2px}'
+            for view in ("BEFORE", "DELTA", "AFTER")
+        )
+        mission_css = """
+.mission-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:center;margin-bottom:12px;padding:18px 20px;border:1px solid #b9c8f6;border-radius:18px;background:linear-gradient(120deg,#f8faff,#edf2ff 70%,#f2fbf6);box-shadow:0 10px 30px rgba(49,93,216,.10)}
+.mission-number{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:var(--blue);color:white;font-size:20px;font-weight:900}.mission-copy small{color:var(--blue);font-size:10px;font-weight:800;letter-spacing:.1em}.mission-copy h2{margin:2px 0 5px;font-size:20px}.mission-copy p{margin:0}.mission-success{margin-top:7px!important;color:var(--green);font-weight:700}.mission-meta{display:grid;gap:6px;justify-items:end;color:var(--muted);font-size:11px}.mission-meta b{padding:6px 10px;border-radius:999px;background:white;color:var(--blue)}
+.mission-more{grid-column:2/4}.mission-more summary{cursor:pointer;color:var(--blue);font-size:12px;font-weight:700}.mission-more .action-list{margin-top:8px}.action-list small{display:block;margin-top:3px;color:var(--green)}
+@media(max-width:640px){.mission-card{grid-template-columns:auto 1fr}.mission-meta{grid-column:1/-1;grid-auto-flow:column;justify-items:start}.mission-more{grid-column:1/-1}}
+"""
+        css = """
+:root{--bg:#f2f3f0;--paper:#fbfbf8;--ink:#18201d;--muted:#68716d;--line:#d8dcd6;--blue:#315dd8;--blue-soft:#eaf0ff;--green:#17834a;--green-soft:#e9f7ee;--red:#c13d45;--red-soft:#fff0f0;--amber:#a86308;--focus:#ef9f1a;--shadow:0 18px 55px rgba(31,45,39,.10)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;overflow-x:hidden;background:linear-gradient(135deg,#eef0eb,#f8f8f5 55%,#edf2f0);color:var(--ink);font:15px/1.55 "Segoe UI","Microsoft YaHei",sans-serif}button,label,summary{font:inherit}.canvas-radio{position:absolute;width:1px;height:1px;opacity:.001;clip-path:inset(50%)}main{max-width:1440px;margin:auto;padding:18px 24px 40px}.canvas-header{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:end;padding:22px 26px;border:1px solid #29312e;border-radius:20px;background:#18201d;color:white;box-shadow:var(--shadow)}.eyebrow{color:#9fb7ff;font-size:11px;font-weight:800;letter-spacing:.16em}.canvas-header h1{max-width:980px;margin:5px 0 8px;font-size:clamp(24px,3vw,38px);line-height:1.18;letter-spacing:-.025em}.canvas-header p{max-width:940px;margin:0;color:#cad1ce}.capsule-route{display:grid;grid-template-columns:minmax(0,1fr) 38px minmax(0,1fr);gap:10px;align-items:center;max-width:980px;margin:12px 0}.capsule-route span{padding:10px 12px;border:1px solid #40504a;border-radius:10px;background:#222c28;color:#f3f6f4;font-weight:700}.capsule-route small{display:block;margin-bottom:2px;color:#9fb7ff;font-size:9px;letter-spacing:.1em}.capsule-route b{color:#9fb7ff;font-size:22px;text-align:center}.status-stack{display:grid;gap:8px;justify-items:end}.status-pill{padding:6px 11px;border:1px solid #82958d;border-radius:999px;color:#dce5e1;font-size:11px;font-weight:800}.delta-summary{display:flex;gap:6px}.delta-summary span{min-width:45px;padding:7px 10px;border-radius:9px;background:#27322e;text-align:center;font-weight:800}.delta-summary span:first-child{color:#76d59b}.delta-summary span:nth-child(2){color:#ff959a}.delta-summary span:last-child{color:#f1bd6c}.partial-banner{grid-column:1/-1;padding:8px 12px;border-radius:9px;background:#3b3020;color:#ffe0a9;font-size:12px}.canvas-workspace{margin-top:12px}.canvas-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;border:1px solid var(--line);border-radius:15px;background:rgba(251,251,248,.94)}.view-switch{display:flex;gap:5px;padding:4px;border-radius:11px;background:#e5e8e3}.view-switch label{min-width:92px;padding:8px 13px;border:1px solid transparent;border-radius:8px;color:var(--muted);text-align:center;font-weight:750;cursor:pointer}.view-switch label small{display:block;font-size:9px;letter-spacing:.08em}.legend{display:flex;gap:14px;color:var(--muted);font-size:12px}.legend i{display:inline-block;width:8px;height:8px;margin-right:5px;border-radius:50%}.legend .add{background:var(--green)}.legend .remove{background:var(--red)}.legend .change{background:var(--amber)}.chapter-stepper{display:flex;gap:8px;margin:9px 0;overflow:auto;scrollbar-width:thin}.chapter-step{display:flex;flex:1;min-width:155px;align-items:center;gap:9px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:#f9faf7;color:var(--muted);cursor:pointer}.chapter-step>span{display:grid;place-items:center;flex:0 0 28px;height:28px;border-radius:8px;background:#e6e9e4;font-size:10px}.chapter-step strong{font-size:13px;white-space:nowrap}.canvas-chapter{display:none}.canvas-chapter-shell{display:grid;grid-template-columns:minmax(0,2.25fr) minmax(270px,.75fr);min-height:475px;border:1px solid var(--line);border-radius:20px;background:var(--paper);box-shadow:var(--shadow);overflow:hidden}.canvas-main{min-width:0;padding:20px}.chapter-heading{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.chapter-heading span{color:var(--blue);font-size:10px;font-weight:800;letter-spacing:.09em}.chapter-heading h2{max-width:850px;margin:3px 0 14px;font-size:21px;line-height:1.35}.mini-counts{display:flex;gap:4px}.mini-counts span{padding:3px 7px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:10px}.canvas-scene{display:none;align-content:start;gap:12px;min-height:330px;padding:15px;border:1px solid #dfe3dd;border-radius:15px;background:radial-gradient(circle at 20% 0,#fff 0,transparent 42%),linear-gradient(#f5f6f2,#f0f2ed);background-size:auto,auto}.scene-column{display:grid;align-content:start;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.scene-label{grid-column:1/-1;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.11em}.delta-grid{display:grid;grid-template-columns:minmax(0,1fr) 58px minmax(0,1fr);gap:10px}.delta-divider{display:grid;place-items:center;align-content:center;color:var(--blue)}.delta-divider span{font-size:10px;font-weight:800}.delta-divider b{font-size:26px}.canvas-node{display:flex;position:relative;min-width:0;gap:10px;align-items:center;padding:13px;border:1px solid var(--line);border-left:5px solid var(--amber);border-radius:12px;background:white;box-shadow:0 5px 18px rgba(35,48,42,.06);cursor:pointer;transition:transform .16s,box-shadow .16s,opacity .16s}.canvas-node:hover{transform:translateY(-2px);box-shadow:0 9px 24px rgba(35,48,42,.12)}.canvas-scene[data-canvas-view="DELTA"] .canvas-node.role-old{background:#f6f6f3;opacity:.58}.canvas-node.change-added{border-left-color:var(--green)}.canvas-node.change-removed{border-left-color:var(--red)}.node-symbol{display:grid;place-items:center;flex:0 0 32px;height:32px;border-radius:9px;background:#eef0ec;font-weight:900}.change-added .node-symbol{color:var(--green);background:var(--green-soft)}.change-removed .node-symbol{color:var(--red);background:var(--red-soft)}.node-copy{min-width:0}.node-copy strong,.node-copy small{display:block;overflow:hidden;text-overflow:ellipsis}.node-copy small{color:var(--muted);font:10px/1.35 Consolas,monospace;white-space:nowrap}.node-change{margin-left:auto;color:var(--muted);font-size:10px}.verified-routes,.parallel-boundary{grid-column:1/-1;margin-top:2px;padding:10px;border:1px dashed #b9c2bc;border-radius:11px;background:#fbfcfa}.route-title{margin-bottom:6px;color:var(--blue);font-size:10px;font-weight:800;letter-spacing:.08em}.verified-route{display:grid;grid-template-columns:minmax(100px,1fr) minmax(95px,.65fr) minmax(100px,1fr) auto;gap:8px;align-items:center;margin-top:5px;font-size:12px}.verified-route>span{padding:6px 8px;border-radius:7px;background:white;text-align:center}.verified-route b{display:flex;gap:5px;justify-content:center;color:var(--blue)}.verified-route b small{font-weight:600}.verified-route em{color:var(--muted);font-size:9px}.parallel-boundary{display:flex;gap:10px;align-items:center}.parallel-boundary>span{display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:#ecefea;color:#69736e;font-weight:900}.parallel-boundary strong{font-size:12px}.parallel-boundary p{margin:1px 0;color:var(--muted);font-size:11px}.truth-boundary{margin:9px 2px 0;color:var(--muted);font-size:11px}.passport-rail{padding:20px;border-left:1px solid var(--line);background:#f0f2ed}.canvas-passport{display:none;position:sticky;top:14px;padding:17px;border:1px solid var(--line);border-radius:15px;background:white;box-shadow:0 8px 24px rgba(34,46,40,.07)}.empty-passport{display:block}.passport-kicker{color:var(--blue);font-size:9px;font-weight:800;letter-spacing:.08em}.canvas-passport h3{margin:7px 0;font-size:20px}.passport-tech{padding:9px;border-radius:8px;background:#f2f4f1;font:11px/1.45 Consolas,monospace;overflow-wrap:anywhere}.passport-facts{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:12px 0}.passport-facts span{padding:8px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:10px}.passport-facts b{display:block;color:var(--ink);font-size:12px}.location{display:block;margin-top:10px;color:var(--blue);font:11px/1.4 Consolas,monospace;overflow-wrap:anywhere}.canvas-passport details{margin-top:12px}.canvas-passport summary,.evidence-details summary{cursor:pointer;color:var(--blue);font-size:11px;font-weight:700}code{display:block;margin-top:7px;color:#5f6964;font:10px/1.45 Consolas,monospace;overflow-wrap:anywhere}.below-fold{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.insight-card,.evidence-details{padding:16px;border:1px solid var(--line);border-radius:15px;background:var(--paper)}.insight-card h2{margin:0 0 9px;font-size:17px}.action-list,.impact-list{display:grid;gap:7px;margin:0;padding:0;list-style:none}.action-list li{display:flex;gap:10px;align-items:flex-start;padding:8px;border-radius:9px;background:#f0f2ed}.action-list li>span{display:grid;place-items:center;flex:0 0 24px;height:24px;border-radius:7px;background:var(--ink);color:white;font-size:10px}.impact-list li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.impact-list small{color:var(--muted)}.evidence-details{grid-column:1/-1}.evidence-details>summary{font-size:14px}.evidence-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:13px}.evidence-card{padding:11px;border:1px solid var(--line);border-radius:10px;background:white}.evidence-card>span{color:var(--blue);font-size:9px;font-weight:800}.evidence-card p{font-size:12px}.technical-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.technical-grid h3{font-size:14px}.technical-grid ul{padding-left:20px}.technical-grid table{width:100%;border-collapse:collapse;font-size:11px}.technical-grid th,.technical-grid td{padding:7px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}footer{margin:22px 2px;color:var(--muted);font-size:11px}
+@media(max-width:960px){main{padding:12px}.canvas-header{grid-template-columns:1fr}.status-stack{justify-items:start}.canvas-chapter-shell{grid-template-columns:1fr}.passport-rail{border-top:1px solid var(--line);border-left:0}.canvas-passport{position:static}.delta-grid{grid-template-columns:1fr}.delta-divider{grid-template-columns:auto auto;gap:8px}.below-fold{grid-template-columns:1fr}.evidence-details{grid-column:1}.evidence-grid,.technical-grid{grid-template-columns:1fr}}
+@media(max-width:640px){.canvas-header{padding:18px}.capsule-route{grid-template-columns:1fr}.capsule-route b{transform:rotate(90deg)}.canvas-toolbar{align-items:stretch;flex-direction:column}.view-switch label{min-width:0;flex:1;padding:7px}.legend{justify-content:center}.chapter-step{flex:0 0 auto}.canvas-main{padding:13px}.chapter-heading{display:block}.mini-counts{margin-bottom:10px}.scene-column{grid-template-columns:1fr}.verified-route{grid-template-columns:1fr}.verified-route b{transform:rotate(90deg)}.node-change{display:none}.passport-rail{padding:13px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+""" + mission_css + view_css + "".join(chapter_css) + "".join(focus_css)
+
+        partial_banner = (
+            f'<div class="partial-banner">{esc(canvas["partial_note_zh"])}</div>'
+            if story["status"] == "PARTIAL" else ""
+        )
+        status_label = "分析不完整" if story["status"] == "PARTIAL" else "FRESH"
         return f'''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{esc(story["title"])}</title>
-<style>
-:root{{--bg:#f6f8fc;--panel:#fff;--ink:#172033;--muted:#667085;--line:#dce3ee;--blue:#3157d5;--blue-strong:#173ca7;--blue-soft:#eef3ff;--cyan:#0e91a5;--green:#16803c;--red:#c73535;--amber:#a96308;--purple:#7657c5;--shadow:0 12px 32px #253b6b12;--shadow-hover:0 16px 36px #253b6b1c}}
-*{{box-sizing:border-box}} body{{margin:0;overflow-x:hidden;background:radial-gradient(circle at 8% 0,#eaf0ff 0,transparent 30%),linear-gradient(#f9fbff,#f4f6fa);color:var(--ink);font:15px/1.65 Inter,"Segoe UI","Microsoft YaHei",sans-serif}}
-main{{max-width:1320px;margin:auto;padding:26px 30px}} header{{position:relative;overflow:hidden;background:linear-gradient(135deg,#101b42,#173ca7 62%,#167e9a);color:white;border-radius:22px;padding:25px 32px;box-shadow:0 22px 55px #173ca72c}}
-header:after{{content:"";position:absolute;width:240px;height:240px;right:-65px;top:-125px;border:1px solid #ffffff30;border-radius:50%;box-shadow:0 0 0 32px #ffffff0b,0 0 0 68px #ffffff08}} .eyebrow{{font-size:10px;font-weight:800;letter-spacing:.14em;color:#b9d5ff}} .header-lead{{position:relative;z-index:1;max-width:880px;font-size:17px;font-weight:650;overflow-wrap:anywhere}} h1{{position:relative;z-index:1;margin:6px 0;font-size:29px;letter-spacing:-.02em;overflow-wrap:anywhere}} h2{{margin:30px 0 13px;letter-spacing:-.015em}} h3{{margin:0 0 7px}} h4{{margin:0 0 8px}} p{{margin:6px 0}} small,.en{{color:var(--muted)}} header .en{{position:relative;z-index:1;color:#cddcff;overflow-wrap:anywhere;font-size:13px}} .digest{{position:relative;z-index:1;word-break:break-all;opacity:.64;font-size:10px}}
-.status{{float:right;position:relative;z-index:2;display:inline-block;padding:3px 10px;border-radius:999px;background:#ffffff1f;border:1px solid #ffffff4a;font-weight:700}} .partial-note{{margin-top:11px;padding:8px 12px;border-radius:9px;background:#ffefc5;color:#724500;font-size:13px}}
-.tab-input{{position:absolute;opacity:0;pointer-events:none}} .tab-nav{{display:flex;gap:8px;margin:20px 0 0;padding:6px;background:#e5eaf3;border-radius:14px;position:sticky;top:8px;z-index:5;box-shadow:var(--shadow)}}
-.tab-nav label{{flex:1;text-align:center;padding:10px 12px;border-radius:10px;cursor:pointer;font-weight:750;color:var(--muted)}} .tab-nav label small{{display:block;font-size:10px;font-weight:550}} #tab-daily:checked~.tab-nav label[for=tab-daily],#tab-quick:checked~.tab-nav label[for=tab-quick],#tab-deep:checked~.tab-nav label[for=tab-deep]{{background:white;color:var(--blue);box-shadow:0 4px 14px #26395c18}}
-.tab-panel{{display:none}} #tab-daily:checked~.daily-panel,#tab-quick:checked~.quick-panel,#tab-deep:checked~.deep-panel{{display:block}} .hero-summary{{font-size:21px;font-weight:700;margin:24px 0 10px}} .analogy{{padding:16px 18px;border:1px dashed #8aa8ef;background:#f6f9ff;border-radius:13px;color:#25447f}}
-.daily-hero{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:22px;align-items:start;margin-top:24px;padding:25px 27px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(145deg,#fff,#f5f8ff);box-shadow:var(--shadow)}} .daily-kicker{{display:block;color:var(--blue);font-size:10px;font-weight:850;letter-spacing:.12em}} .daily-hero h2{{margin:3px 0 8px;font-size:26px}} .daily-statement{{display:block;max-width:990px;font-size:21px;line-height:1.55;letter-spacing:-.01em}} .daily-impact{{margin-top:12px;padding-top:11px;border-top:1px solid var(--line);color:#536079}} .daily-impact b{{color:var(--ink)}} .daily-confidence{{margin-top:11px;padding:9px 12px;border-radius:10px;background:#fff4d6;color:#795010;font-size:13px}} .daily-check-title{{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-top:28px}} .daily-check-title h2{{margin:0}} .daily-check-title p{{color:var(--muted)}} .daily-checks{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}} .daily-check{{display:flex;gap:13px;min-height:132px;padding:16px;background:white;border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow)}} .daily-check>div{{min-width:0}} .daily-check small,.daily-check strong{{display:block}} .daily-check small{{color:var(--blue);font-size:10px;font-weight:800;letter-spacing:.06em}} .daily-check strong{{margin-top:5px;line-height:1.55}} .check-box{{display:grid;place-items:center;flex:0 0 30px;height:30px;border:2px solid #8fa7e8;border-radius:9px;color:var(--blue);font-weight:800}} .daily-actions{{display:flex;justify-content:flex-end;gap:9px;margin-top:15px}} .daily-actions label{{padding:10px 15px;border:1px solid #b9c8eb;border-radius:10px;background:white;color:var(--blue);font-weight:750;cursor:pointer}} .daily-actions label:first-child{{background:var(--blue);border-color:var(--blue);color:white}}
-.quick-intro{{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin:26px 0 13px;padding:0 3px}} .quick-intro small{{display:block;color:var(--blue);font-size:11px;font-weight:800;letter-spacing:.1em}} .quick-intro h2{{margin:2px 0 3px;font-size:25px}} .quick-intro p{{max-width:900px;color:#43516a}} .shape-tag{{display:inline-grid;place-items:center;min-width:92px;padding:7px 12px;border-radius:999px;background:#e8efff;color:var(--blue);font-size:11px;font-weight:800;letter-spacing:.08em}}
-.takeaways{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}} .takeaway{{display:flex;gap:13px;min-height:104px;padding:17px;background:linear-gradient(145deg,#fff,#f8faff);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}} .takeaway>span{{display:grid;place-items:center;flex:0 0 34px;height:34px;border-radius:11px;background:var(--blue);color:white;font:800 12px/1 system-ui}} .takeaway strong,.takeaway small{{display:block}} .takeaway strong{{font-size:17px;line-height:1.45}} .takeaway small{{margin-top:4px}} .outcome-card{{display:flex;gap:12px;align-items:flex-start;margin-top:12px;padding:12px 15px;border-radius:12px;background:#eef3ff;color:#354e83}} .outcome-card>span{{font-size:18px}} .outcome-card p{{margin:0;color:var(--muted)}}
-.scenario-input{{position:absolute;opacity:0;pointer-events:none}} .scenario-nav{{display:flex;gap:8px;overflow-x:auto;padding:7px;background:#e8edf5;border:1px solid #dfe5ef;border-radius:14px;margin:12px 0}} .scenario-nav label{{display:flex;align-items:center;gap:7px;white-space:nowrap;padding:10px 14px;border:1px solid transparent;border-radius:10px;background:#ffffffcf;color:var(--muted);cursor:pointer;font-weight:700;transition:transform .16s ease,box-shadow .16s ease}} .scenario-nav label:hover{{transform:translateY(-1px);box-shadow:0 5px 12px #33466d15}} .scenario-panel{{display:none;padding:20px;background:white;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}} .scenario-heading{{display:flex;gap:14px;align-items:flex-start}} .scenario-question{{flex:1;padding:14px 17px;border-left:5px solid var(--blue);background:linear-gradient(90deg,#f2f6ff,#fafcff);border-radius:12px}} .scenario-question>span{{display:block;color:var(--blue);font-size:10px;font-weight:800;letter-spacing:.08em}} .scenario-question>strong{{display:block;font-size:20px}} .scenario-question p{{color:#4b5870}} .scenario-shape{{padding:5px 10px;border:1px solid #bac9ef;border-radius:999px;color:var(--blue);font-size:10px;font-weight:800;letter-spacing:.08em}} .shape-added{{color:var(--green);border-color:#abd8ba;background:#f1fbf4}} .shape-removed{{color:var(--red);border-color:#e7b4b4;background:#fff5f5}}
-.scenario-compare{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}} .scenario-compare>div,.scenario-single{{padding:15px;border:1px solid var(--line);border-radius:13px;background:#fbfcff}} .scenario-single{{margin-top:12px;border-top:4px solid var(--green);background:#f9fdfb}} .scenario-single.removed{{border-top-color:var(--red);background:#fffafa}} .scenario-item-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:9px}} .scenario-item-grid .scenario-item{{margin:0}} .scenario-transition{{display:grid;grid-template-columns:1fr 36px 1fr;align-items:center;gap:10px;margin-top:14px;padding:11px 14px;border-radius:13px;background:#f3f6fb;color:#41506b;text-align:center}} .scenario-transition span{{display:block;padding:5px}} .scenario-transition small{{display:block;font-size:10px;font-weight:800;letter-spacing:.08em}} .scenario-transition b{{color:var(--blue);font-size:20px}} .transition-added span:last-child{{color:var(--green);font-weight:700}} .transition-removed span:last-child{{color:var(--red);font-weight:700}}
-.scenario-item{{padding:12px 13px;margin:8px 0;border:1px solid var(--line);border-left:4px solid #94a3b8;border-radius:10px;background:white;overflow-wrap:anywhere}} .scenario-item>strong,.scenario-item>small{{display:block}} .scenario-note{{font-size:13px;color:#35558d;background:#edf3ff;padding:9px 12px;border-radius:9px}} .scenario-routes{{margin-top:13px;padding:14px;border:1px solid #cfd9ed;border-radius:13px;background:linear-gradient(145deg,#fbfdff,#f4f7fd)}} .scenario-routes h4 small{{margin-left:6px;font-size:10px;letter-spacing:.08em}} .route-row{{display:grid;grid-template-columns:minmax(140px,1fr) minmax(100px,.55fr) minmax(140px,1fr) auto;align-items:center;gap:8px;margin-top:8px}} .route-node{{padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:white;font-weight:700;text-align:center}} .route-edge{{display:flex;align-items:center;gap:7px;color:var(--blue)}} .route-edge:before{{content:"";height:2px;flex:1;background:linear-gradient(90deg,#b8c7ec,var(--blue))}} .route-edge small{{white-space:nowrap;color:var(--blue);font-weight:700}} .route-edge b{{font-size:17px}} .route-confidence{{padding:2px 7px;border-radius:999px;background:#e7eefc;color:#53688f;font-size:10px;font-weight:700}}
-{scenario_css}
-.cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}} .change-card{{display:flex;gap:11px;background:white;border:1px solid var(--line);border-top:4px solid var(--blue);border-radius:14px;padding:16px;box-shadow:var(--shadow);min-width:0}} .change-card>div:last-child{{min-width:0}} .card-icon{{font-size:25px}} .change-card p{{font-size:14px;overflow-wrap:anywhere}} .evidence summary{{cursor:pointer;color:var(--blue);font-size:12px}}
-.change-map{{display:grid;grid-template-columns:minmax(0,1fr) 44px minmax(0,1.1fr) 44px minmax(0,1fr);gap:10px;align-items:stretch;margin-top:14px}} .map-column{{background:white;border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow)}} .map-column h3{{display:flex;justify-content:space-between;gap:8px}} .map-column h3 small{{font-weight:500}} .map-before{{border-top:5px solid #8a95a8}} .map-change{{border-top:5px solid var(--amber);background:#fffdf8}} .map-after{{border-top:5px solid var(--blue)}} .map-item{{padding:11px 12px;margin-top:9px;border:1px solid var(--line);border-left:4px solid #94a3b8;border-radius:10px;background:#fafcff;overflow-wrap:anywhere}} .map-item strong,.map-item small{{display:block}} .map-connector{{display:grid;place-items:center;font-size:28px;font-weight:800;color:var(--blue)}} .map-connector.parallel{{font-size:19px;letter-spacing:2px;color:#98a2b3}} .map-note{{margin:12px 0 0;padding:10px 13px;border-radius:10px;background:#edf3ff;color:#35558d;font-size:13px}} .quick-support{{margin-top:18px;padding:13px 15px;background:#eef2f7;border-radius:12px}} .quick-support>summary{{cursor:pointer;font-weight:700}} .quick-support .analogy{{margin:13px 0}}
-.comparison,.two-columns,.layers,.lanes,.stage-body{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px}} .lane,.panel,.claim,.chain,.stage,.decision,.risk{{background:var(--panel);border:1px solid var(--line);border-radius:14px}} .lane,.panel{{padding:18px}} .lane-old{{border-top:5px solid #8a95a8}} .lane-new{{border-top:5px solid var(--blue)}}
-.flow-step{{display:flex;gap:11px;padding:12px;border:1px solid var(--line);border-left:4px solid #94a3b8;border-radius:10px;background:#fafcff}} .flow-step>div{{min-width:0}} .flow-step strong,.flow-step span,.location{{display:block}} .flow-step span,.location{{color:var(--muted);font-size:12px;overflow-wrap:anywhere}} .step-number,.stage-number{{display:grid!important;place-items:center;flex:0 0 25px;height:25px;border-radius:50%;background:var(--blue-soft);color:var(--blue)!important;font-weight:700}} .flow-arrow{{padding:2px 0 2px 11px;color:#7b8aa5}}
-.risk{{display:flex;gap:12px;padding:14px;margin:10px 0;border-left:5px solid var(--amber)}} .risk>span{{font-size:11px;font-weight:800;color:var(--amber)}} .risk-high{{border-left-color:var(--red)}} .risk-high>span{{color:var(--red)}}
-.method-note{{padding:15px 17px;border-left:5px solid var(--purple);background:#f6f2ff;border-radius:11px}} .deep-section{{margin:18px 0;padding:13px 15px;background:#eef2f7;border-radius:14px}} .deep-section>summary{{cursor:pointer;font-weight:800}} .stage{{margin:12px 0;overflow:hidden}} .stage>summary{{display:flex;align-items:center;gap:11px;padding:15px;cursor:pointer;background:#f8faff}} .stage>summary small{{display:block}} .stage-icon{{font-size:24px}} .stage-body{{padding:16px}} .stage-body ul{{padding-left:18px}} .stage-body li{{margin:7px 0;overflow-wrap:anywhere}} .relation{{color:var(--blue)}}
-.decision{{display:flex;gap:12px;padding:14px;margin:10px 0;border-left:4px solid var(--amber)}} .decision-mark{{font-size:23px;color:var(--amber)}} .decision small{{display:block}} .technical{{margin-top:24px;padding:16px;background:#eef2f7;border-radius:14px}} .technical>summary{{cursor:pointer;font-weight:800}}
-.metrics{{display:grid;grid-template-columns:repeat(6,minmax(90px,1fr));gap:9px;margin:16px 0}} .metric{{padding:12px;background:white;border:1px solid var(--line);border-radius:10px}} .metric strong{{display:block;font-size:20px}} .layers{{grid-template-columns:repeat(3,minmax(0,1fr))}} .claim{{padding:13px;margin:9px 0;border-left:4px solid var(--blue)}} .claim.source_evidence{{border-left-color:var(--purple)}} .claim.intent_inference{{border-left-color:var(--amber)}} .claim-tag{{font-size:11px;color:var(--muted)}}
-.chain{{padding:12px;margin:10px 0}} .chain-node{{padding:10px 12px;border-radius:9px;background:#f8fafc;border-left:4px solid #94a3b8;overflow-wrap:anywhere}} .chain-node span{{display:block;color:var(--muted);font-size:12px}} .arrow{{padding:6px 18px;color:var(--blue)}} .arrow span:before{{content:"↓  "}} .arrow small{{display:block;margin-left:18px}}
-.change-added{{border-color:var(--green)!important}} .change-removed{{border-color:var(--red)!important}} .change-updated{{border-color:var(--amber)!important}} .change-moved,.change-renamed,.change-renamed_and_moved{{border-color:var(--blue)!important}} .badge.change-added{{color:var(--green)}} .badge.change-removed{{color:var(--red)}} .badge.change-updated{{color:var(--amber)}} .badge.change-moved,.badge.change-renamed,.badge.change-renamed_and_moved{{color:var(--blue)}}
-table{{width:100%;border-collapse:collapse;background:white;border-radius:12px;overflow:hidden}} th,td{{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}} th{{background:#edf2f8}} code{{display:block;font-size:11px;word-break:break-all;color:#58647a}} .badge{{display:inline-block;border:1px solid currentColor;border-radius:999px;padding:2px 8px;font-size:11px}} .empty{{color:var(--muted)}} footer{{margin:30px 0;color:var(--muted)}}
-@media(max-width:1050px){{.cards{{grid-template-columns:repeat(2,1fr)}}.change-map{{grid-template-columns:1fr}}.map-connector{{min-height:22px;transform:rotate(90deg)}}.map-connector.parallel{{transform:none}}.route-row{{grid-template-columns:1fr 90px 1fr}}.route-confidence{{display:none}}.daily-checks{{grid-template-columns:1fr}}}} @media(max-width:780px){{main{{padding:13px}}header{{padding:23px 22px}}.status{{float:none;margin-bottom:7px}}.cards,.comparison,.two-columns,.layers,.lanes,.stage-body,.scenario-compare,.takeaways{{grid-template-columns:1fr}}.metrics{{grid-template-columns:repeat(2,1fr)}}.tab-nav{{position:static;overflow-x:auto}}.tab-nav label{{flex:0 0 auto;min-width:155px}}.daily-hero{{grid-template-columns:1fr;padding:20px}}.daily-statement{{font-size:18px}}.daily-check-title{{display:block}}.daily-actions{{justify-content:stretch;flex-direction:column}}.daily-actions label{{text-align:center}}.quick-intro{{align-items:flex-start;flex-direction:column;gap:8px}}.scenario-heading{{display:block}}.scenario-shape{{display:inline-block;margin-top:9px}}.scenario-transition{{grid-template-columns:1fr 28px 1fr}}.route-row{{grid-template-columns:1fr}}.route-edge{{justify-content:center}}.route-edge:before{{max-width:52px}}}}
-</style></head><body><main data-story-digest="{esc(story["canonical_digest"])}">
-<header><span class="status">{status}</span><div class="eyebrow">AEH CHANGE STORY · SCENARIO LENS</div><h1>{esc(story["title"])}</h1>
-<p class="header-lead">{esc(scenario_lens["summary_zh"])}</p><p class="en">{esc(scenario_lens["summary_en"])}</p>
-{('<div class="partial-note">PARTIAL：当前结论仅覆盖变更 C# 文件，所有关系最高为结构级证据。</div>' if story["status"] == "PARTIAL" else '')}
-<p class="digest">Analysis {esc(story["analysis_digest"])} · Story {esc(story["canonical_digest"])}</p></header>
-<input class="tab-input" type="radio" name="story-tab" id="tab-daily" checked><input class="tab-input" type="radio" name="story-tab" id="tab-quick"><input class="tab-input" type="radio" name="story-tab" id="tab-deep">
-<nav class="tab-nav"><label for="tab-daily">◎ 只看结论 <small>30 秒 · DAILY</small></label><label for="tab-quick">◇ 理解改法 <small>3 分钟 · READ</small></label><label for="tab-deep">▦ 核对证据 <small>按需 · FULL</small></label></nav>
-<section class="tab-panel daily-panel">
-<section class="daily-hero"><div><small class="daily-kicker">TODAY'S CHANGE BRIEF</small><h2>{esc(daily["question_zh"])}</h2><strong class="daily-statement">{esc(daily["what_changed_zh"])}</strong><p class="daily-impact"><b>与你的工作有什么关系：</b>{esc(daily["why_it_matters_zh"])}</p>{(f'<p class="daily-confidence">{esc(daily["confidence_note_zh"])}</p>' if story["status"] == "PARTIAL" else '')}</div><span class="shape-tag">主场景 · {esc(daily["change_shape"])}</span></section>
-<section class="quick-intro"><div><small>THREE THINGS TO REMEMBER</small><h2>先记住这三点</h2></div></section><section class="takeaways">{takeaway_cards()}</section>
-<div class="daily-check-title"><div><small class="daily-kicker">NEXT ACTIONS</small><h2>建议先验证</h2></div><p>这是检查建议，不是代码事实。</p></div><section class="daily-checks">{daily_checks()}</section>
-<div class="daily-actions"><label for="tab-quick">继续理解改法 →</label><label for="tab-deep">直接核对证据</label></div>
-</section>
-<section class="tab-panel quick-panel">
-<section class="quick-intro"><div><small>SCENARIO READING</small><h2>选择你要理解的问题</h2><p>{esc(scenario_lens["outcome_zh"])}</p></div><span class="shape-tag">主场景 · {esc(primary_scenario["change_shape"])}</span></section><div class="outcome-card"><span>◎</span><p>{esc(scenario_lens["scope_note_zh"])}</p></div>{scenario_markup}
-<section class="two-columns"><div><h2>影响范围</h2><div class="panel"><p>{esc(visual["impact_zh"])}</p></div></div><div><h2>最需要注意</h2><div class="panel"><p>{esc(visual["risk_zh"])}</p></div></div></section>
-<details class="quick-support"><summary>展开完整 OLD / NEW 版本对照</summary><section class="change-map" data-change-shape="{esc(visual["change_shape"])}" data-relationship-mode="{esc(visual["relationship_mode"])}">
-<div class="map-column map-before"><h3>{esc(visual["before_label_zh"])} <small>{esc(visual["before_label_en"])}</small></h3>{visual_items(visual["before"])}</div>
-{map_connector()}<div class="map-column map-change"><h3>{esc(visual["change_label_zh"])} <small>{esc(visual["change_label_en"])}</small></h3>{visual_items(visual["changes"])}</div>
-{map_connector()}<div class="map-column map-after"><h3>{esc(visual["after_label_zh"])} <small>{esc(visual["after_label_en"])}</small></h3>{visual_items(visual["after"])}</div></section>
-<p class="map-note">证据边界：{esc(visual["relationship_note_zh"])}</p></details>
-<details class="quick-support"><summary>展开辅助理解与涉及领域</summary><div class="analogy">{esc(quick["analogy_zh"])}</div><section class="cards">{quick_cards()}</section></details>
-</section>
-<section class="tab-panel deep-panel">
-<p class="hero-summary">{esc(deep["strategy_summary_zh"])}</p><div class="method-note">{esc(deep["method_note_zh"])}</div>
-<details class="deep-section"><summary>按业务层展开代表对象与关系</summary>{stages()}</details>
-<details class="deep-section"><summary>展开新增决策与退出点</summary><section class="two-columns">{decisions()}</section></details>
-<div class="panel"><strong>证据说明</strong><p>{esc(deep["evidence_summary_zh"])}</p></div>
-<details class="technical"><summary>展开完整技术证据（符号、关系、限制）</summary>
-<section class="metrics"><div class="metric"><strong>{counts["added_nodes"]}</strong><span>新增节点</span></div><div class="metric"><strong>{counts["removed_nodes"]}</strong><span>删除节点</span></div><div class="metric"><strong>{counts["updated_node_pairs"]}</strong><span>修改节点对</span></div><div class="metric"><strong>{counts["moved_node_pairs"]}</strong><span>移动节点对</span></div><div class="metric"><strong>{counts["added_edges"]}</strong><span>新增关系</span></div><div class="metric"><strong>{counts["removed_edges"]}</strong><span>删除关系</span></div></section>
-<h2>修改依据</h2><section class="layers"><div class="panel"><h3>代码事实</h3>{claim_cards(facts,"没有可展示的代码事实。")}</div><div class="panel"><h3>来源证据</h3>{claim_cards(sources,"未提供用户需求、AI 计划或提交说明。")}</div><div class="panel"><h3>意图推断</h3>{claim_cards(inferences,"没有足够代码模式支持意图推断。")}</div></section>
-<h2>完整原链路 → 新链路</h2><section class="lanes"><div class="panel"><h3>原链路</h3>{chain_cards(story["lanes"]["old"])}</div><div class="panel"><h3>新链路</h3>{chain_cards(story["lanes"]["new"])}</div></section>
-<h2>符号变化</h2><table><thead><tr><th>类型</th><th>对象</th><th>置信度</th><th>代码位置</th></tr></thead><tbody>{change_rows()}</tbody></table>
-<section class="lanes"><div><h2>直接影响</h2><div class="panel"><ul>{impacts}</ul></div></div><div><h2>限制与未知项</h2><div class="panel"><ul>{limitations}</ul></div></div></section>
-</details></section>
-<footer>AEH Change Lens · 中文优先离线报告 · 场景优先 + 按需证据 · 不执行目标项目代码 · 不声称还原隐藏思维链</footer>
-</main></body></html>'''
+<title>{esc(story["title"])}</title><style>{css}</style></head>
+<body><main data-story-id="{esc(story["story_id"])}" data-story-digest="{esc(story["canonical_digest"])}">
+<input class="canvas-radio" type="radio" name="canvas-view" id="canvas-view-before">
+<input class="canvas-radio" type="radio" name="canvas-view" id="canvas-view-delta" checked>
+<input class="canvas-radio" type="radio" name="canvas-view" id="canvas-view-after">
+{"".join(chapter_inputs)}
+<header class="canvas-header"><div><div class="eyebrow">AEH CHANGE CANVAS · 10 秒结论</div>
+<h1>{esc(capsule["verdict_zh"])}</h1><div class="capsule-route">
+<span><small>原来</small>{esc(capsule["before_zh"])}</span><b>→</b>
+<span><small>现在</small>{esc(capsule["after_zh"])}</span></div>
+<p><strong>影响：</strong>{esc(capsule["impact_zh"])}</p></div>
+<div class="status-stack"><span class="status-pill">{status_label}</span><div class="delta-summary">
+<span>+{canvas["summary"]["added_items"]}</span><span>−{canvas["summary"]["removed_items"]}</span>
+<span>∆{canvas["summary"]["changed_items"]}</span></div></div>{partial_banner}</header>
+<div class="canvas-workspace"><section class="mission-card" aria-label="验证任务">
+<div class="mission-number">1</div><div class="mission-copy"><small>现在只做这一步</small>
+<h2>{body_esc(first_mission_step["action_zh"])}</h2>
+<p class="mission-success">成功标志：{body_esc(first_mission_step["success_zh"])}</p></div>
+<div class="mission-meta"><b>约 {mission["estimated_minutes"]} 分钟</b>
+<span>建议验证 · 尚未执行</span></div>{mission_more}</section>
+<section class="canvas-toolbar" aria-label="画布工具栏">
+<div class="view-switch"><label for="canvas-view-before">原来<small>BEFORE</small></label>
+<label for="canvas-view-delta">变化<small>DELTA</small></label>
+<label for="canvas-view-after">现在<small>AFTER</small></label></div>
+<div class="legend"><span><i class="add"></i>新增</span><span><i class="remove"></i>移除</span>
+<span><i class="change"></i>修改</span></div></section>
+<nav class="chapter-stepper" aria-label="修改故事章节">{"".join(chapter_labels)}</nav>
+<section class="canvas-chapters">{"".join(chapter_panels)}</section>
+<section class="below-fold"><article class="insight-card"><h2>验证边界</h2>
+<p>{body_esc(mission["boundary_zh"])}</p><p><strong>完成条件：</strong>{body_esc(mission["completion_zh"])}</p>
+</article><article class="insight-card"><h2>影响与未知项</h2>
+<ul class="impact-list">{impacts}</ul></article>
+<details class="evidence-details"><summary>详细思路拆解与代码证据（按需展开）</summary>
+<p>{body_esc(story["deep_dive"]["method_note_zh"])}</p><div class="evidence-grid">{claims}</div>
+<div class="technical-grid"><div><h3>符号变化</h3><table><thead><tr><th>类型</th><th>对象</th><th>置信度</th></tr></thead>
+<tbody>{changes}</tbody></table></div><div><h3>限制与未知项</h3><ul>{limitations}</ul></div></div></details></section>
+<footer>AEH Change Lens · 离线、无脚本 · 点击节点查看语义护照 · 连线只代表已验证关系</footer>
+</div></main></body></html>'''
 
 
 def write_change_story_report(

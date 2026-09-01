@@ -10,11 +10,14 @@
 AEH Change Lens 是面向 Unity/C# 游戏业务代码的只读修改解释工具。它把一次代码修改整理为：
 
 ```text
-完整分析 → 日常简报（默认：发生了什么、与你何关、先验证什么）
-         └→ 场景镜头（理解改法）→ OLD/NEW 对照（按需）→ 技术证据
+10 秒结论 → 现在只做一步 → 看到成功标志
+                ├→ 不一致：按该步证据定位原因
+                └→ 想深挖：Change Canvas → 语义护照 → 代码证据
 ```
 
 它不会读取或还原模型隐藏思维链，只展示能够被 Git、Roslyn、用户提供的任务说明和明确标注的推断所支持的结论。
+
+设计上借鉴 [project-based-learning](https://github.com/practical-tutorials/project-based-learning) 的“通过完成真实成果来理解”原则，将它缩小为每次改动一个 1～5 分钟验证任务；AEH 不复制其教程目录，也不依赖其代码。
 
 > [!IMPORTANT]
 > 项目目前是开发预览版，`CL-WP-02` 仍为 `IN_PROGRESS`，尚未完成正式发布评估。当前适合个人受控工作流和原型验证，不代表所有 Unity 项目都可开箱即用。
@@ -24,7 +27,9 @@ AEH Change Lens 是面向 Unity/C# 游戏业务代码的只读修改解释工具
 - 对比 Git `OLD` revision 与 `NEW` revision/工作树，全程不 checkout。
 - 使用 Roslyn 提取调用、分支、异常、状态读写、生命周期、协程、异步、事件和常见 Unity 关系。
 - 输出确定性的新增、删除、修改、移动和上下文关系。
-- 生成中文优先、无脚本、完全离线的 Change Story HTML：默认按问题展示一个场景，按需展开 OLD/NEW 对照与详细证据。
+- CLI 直接返回 10 秒 Change Capsule 和 `verification_mission`：先讲结论，再给一个操作及其成功标志。
+- Codex 支持“带我验证”：一次只展示一步，看到结果后再继续；不会把建议任务冒充为已经运行验证。
+- 需要追问时再打开中文优先、无脚本、完全离线的 Change Canvas HTML，查看 OLD/DELTA/NEW、语义护照和详细证据。
 - 将生成代码、测试代码和语法碎片从首页降权，按配置、服务端、协议、客户端和测试组织业务变化。
 - 严格分开 `CODE_FACT`、`SOURCE_EVIDENCE` 和 `INTENT_INFERENCE`。
 - 对缺失、过期、越界或无法证明的输入 fail closed 或显式降级为 `PARTIAL`。
@@ -48,7 +53,18 @@ AEH Change Lens 是面向 Unity/C# 游戏业务代码的只读修改解释工具
 $aeh-change-lens 分析我当前对 ET6 的修改
 ```
 
-Skill 默认不会介入普通编码任务。它会优先使用当前 Git 仓库，否则使用个人默认项目 `D:\ares\project\ET6`，并将报告写到目标仓库之外。
+Skill 默认不会介入普通编码任务。它会优先使用当前 Git 仓库，否则使用个人默认项目 `D:\ares2\project\ET6`，并将报告写到目标仓库之外。默认不要求打开 HTML，而是直接给出：
+
+```text
+结论：怪物攻击组合改为由编辑器配置驱动。
+原来：组合步骤依赖固定处理。
+现在：编辑、保存和运行路径围绕组合配置组织。
+影响：策划配置与运行时攻击表现。
+现在做：在 Unity 中建立一个两段攻击组合并保存。
+成功标志：组合能够保存，运行时按配置顺序表现，控制台无新增错误。
+```
+
+回复“带我验证”，Codex 会一次只给当前步骤；回复“展开”或“为什么”，才进入 Change Canvas 和代码证据。
 
 ### 方式二：直接使用 CLI
 
@@ -102,7 +118,7 @@ change-lens explain D:\GameRepo Unity `
 python .\run_change_lens.py --help
 ```
 
-完整参数和意图证据格式见 [Change Story 使用说明](docs/CHANGE_STORY.zh-CN.md)。
+完整参数和意图证据格式见 [Change Canvas 使用说明](docs/CHANGE_STORY.zh-CN.md)。
 
 ## 编译基线
 
@@ -118,15 +134,15 @@ change-lens export-compile-manifest D:\GameRepo Unity `
 
 ## 输出
 
-Change Story 报告包含：
+Change Canvas 报告包含：
 
-1. **只看结论**：用一句日常语言说明发生了什么，给出最多 3 个记忆点和 3 条验证建议；
-2. **理解改法**：按读者问题切换场景，每个场景最多 7 个 OLD/NEW 关键对象；
-3. **版本对照**：Change Map Lite 按需展示“原来—核心变化—现在”、影响与首要风险；
-4. **核对证据**：按业务层组织实现阶段、决策点、事实/来源/推断、原始链路和限制；
-5. 可选 `change-story.json`，供 Codex 无需遍历完整 analysis 即可读取聚焦结果。
+1. **Change Capsule**：无需打开报告即可获得“结论 / 原来 / 现在 / 影响”；
+2. **验证任务**：1～3 步，每步包含操作、成功标志和证据引用，默认只展示第一步；
+3. **Change Canvas**：追问时默认显示 `DELTA`，可切换 `BEFORE / DELTA / AFTER`；
+4. **故事章节与语义护照**：按业务问题定位对象，再按需查看技术名、位置和证据；
+5. **详细思路拆解**：事实、来源、推断、符号变化和限制默认收起，完整数据保留在 `change-story.json`。
 
-场景会按 `ADDED`、`REMOVED`、`MODIFIED` 自动选择构图：纯新增或移除场景使用单侧能力画布，不再浪费半屏显示空栏；存在明确关系时，才把关系画成逐条可核对的路径卡。Change Map Lite 仍只在分析结果包含变化关系时显示流程箭头。没有关系证据时，它把方法或类型显示为并列事实，并明确说明显示顺序不代表调用顺序。
+只有 `VERIFIED_FLOW` 才显示方向关系；`PARALLEL_FACTS` 始终以并列事实呈现。`PARTIAL` 只在首屏出现一次，不会被重复警告淹没。画布位置和 OLD→NEW 分栏本身不代表调用关系。
 
 HTML 是 UTF-8 单文件，不包含 JavaScript、CDN、远程字体或遥测。
 
@@ -171,7 +187,7 @@ python -m unittest discover -s tests -v
 从[文档索引](docs/README.md)开始，或直接阅读：
 
 - [实施方案](docs/IMPLEMENTATION_PLAN.zh-CN.md)
-- [Change Story 报告](docs/CHANGE_STORY.zh-CN.md)
+- [Change Canvas 报告](docs/CHANGE_STORY.zh-CN.md)
 - [C#/Unity 能力矩阵](docs/CAPABILITY_MATRIX.zh-CN.md)
 - [OLD/NEW 图差异契约](docs/GRAPH_DIFF.zh-CN.md)
 - [Roslyn Worker](docs/ROSLYN_WORKER.zh-CN.md)
