@@ -255,7 +255,7 @@ class ChangeStoryBuilder:
             daily_brief=daily_brief,
         )
         semantic = {
-            "schema_version": "1.7.0",
+            "schema_version": "1.8.0",
             "story_id": f"story:{analysis_digest[:24]}",
             "language": "zh-CN",
             "status": str(analysis["status"]),
@@ -431,18 +431,171 @@ class ChangeStoryBuilder:
             capsule=capsule,
         )
         capsule["verify_zh"] = verification_mission["steps"][0]["action_zh"]
+        visual_story = ChangeStoryBuilder._visual_story(
+            primary_scenario=primary_scenario,
+            verification_mission=verification_mission,
+        )
         return {
             "default_view": "DELTA",
             "primary_chapter_id": str(primary["chapter_id"]),
             "summary": dict(primary["summary"]),
             "capsule": capsule,
             "verification_mission": verification_mission,
+            "visual_story": visual_story,
             "partial_note_zh": (
                 "PARTIAL：当前画布只覆盖已变更 C# 文件；未变更依赖、完整程序集和运行时绑定尚未确认。"
                 if status == "PARTIAL"
                 else "FRESH：分析上下文完整；实际运行表现仍需通过目标环境验证。"
             ),
             "chapters": chapters,
+        }
+
+    @staticmethod
+    def _visual_story(
+        *, primary_scenario: Mapping[str, object],
+        verification_mission: Mapping[str, object],
+    ) -> dict:
+        """Project one bounded four-beat story without inventing pairs or flow."""
+
+        before = list(primary_scenario["before"])
+        after = list(primary_scenario["after"])
+        after_by_label = {
+            str(item["business_label_zh"]): item for item in after
+        }
+        paired_after_ids: set[str] = set()
+        slot_rows: list[tuple[Mapping[str, object] | None, Mapping[str, object] | None]] = []
+        for old_item in before:
+            new_item = after_by_label.get(str(old_item["business_label_zh"]))
+            if new_item is not None:
+                paired_after_ids.add(str(new_item["item_id"]))
+            slot_rows.append((old_item, new_item))
+        slot_rows.extend(
+            (None, new_item)
+            for new_item in after
+            if str(new_item["item_id"]) not in paired_after_ids
+        )
+
+        slots = []
+        item_to_slot: dict[str, str] = {}
+        for order, (old_item, new_item) in enumerate(slot_rows[:7], start=1):
+            slot_id = f"story-slot:{order}"
+            evidence_refs: list[str] = []
+            for item in (old_item, new_item):
+                if item is None:
+                    continue
+                item_to_slot[str(item["item_id"])] = slot_id
+                for ref in item["evidence_refs"]:
+                    if str(ref) not in evidence_refs:
+                        evidence_refs.append(str(ref))
+            selected = new_item or old_item
+            old_label = (
+                str(old_item["business_label_zh"])
+                if old_item is not None else "旧版本无此步骤"
+            )
+            new_label = (
+                str(new_item["business_label_zh"])
+                if new_item is not None else "新版本无此步骤"
+            )
+            if old_item is None:
+                change = "ADDED"
+            elif new_item is None:
+                change = "REMOVED"
+            else:
+                candidate_changes = [
+                    str(new_item["change"]), str(old_item["change"])
+                ]
+                change = next(
+                    (item for item in candidate_changes if item != "CONTEXT"),
+                    "CONTEXT",
+                )
+            slots.append({
+                "slot_id": slot_id,
+                "order": order,
+                "area": str(selected["area"]),
+                "before_item_id": (
+                    str(old_item["item_id"]) if old_item is not None else None
+                ),
+                "after_item_id": (
+                    str(new_item["item_id"]) if new_item is not None else None
+                ),
+                "before_label_zh": old_label,
+                "after_label_zh": new_label,
+                "change": change,
+                "evidence_refs": evidence_refs,
+            })
+
+        relationship_mode = str(primary_scenario["relationship_mode"])
+        connectors = []
+        if relationship_mode == "VERIFIED_FLOW":
+            before_ids = {str(item["item_id"]) for item in before}
+            after_ids = {str(item["item_id"]) for item in after}
+            for relation in primary_scenario["relationships"]:
+                source_item_id = str(relation["source_item_id"])
+                target_item_id = str(relation["target_item_id"])
+                source_slot_id = item_to_slot.get(source_item_id)
+                target_slot_id = item_to_slot.get(target_item_id)
+                if source_slot_id is None or target_slot_id is None:
+                    continue
+                if {source_item_id, target_item_id}.issubset(before_ids):
+                    views = ["BEFORE", "DELTA"]
+                elif {source_item_id, target_item_id}.issubset(after_ids):
+                    views = ["DELTA", "AFTER"]
+                else:
+                    views = ["DELTA"]
+                connectors.append({
+                    "connector_id": str(relation["edge_id"]),
+                    "source_slot_id": source_slot_id,
+                    "target_slot_id": target_slot_id,
+                    "views": views,
+                    "relation_zh": str(relation["relation_zh"]),
+                    "confidence": str(relation["confidence"]),
+                    "evidence_refs": [str(ref) for ref in relation["evidence_refs"]],
+                })
+                if len(connectors) == 6:
+                    break
+
+        all_slot_ids = [str(item["slot_id"]) for item in slots]
+        before_slot_ids = [
+            str(item["slot_id"]) for item in slots if item["before_item_id"] is not None
+        ]
+        after_slot_ids = [
+            str(item["slot_id"]) for item in slots if item["after_item_id"] is not None
+        ]
+        verify_slot_ids = after_slot_ids or before_slot_ids or all_slot_ids
+        beats = [
+            {
+                "beat_id": "story-beat:before", "order": 1, "view": "BEFORE",
+                "title_zh": "原来怎么工作", "caption_zh": "先建立旧版心智模型。",
+                "focus_slot_ids": before_slot_ids or all_slot_ids,
+            },
+            {
+                "beat_id": "story-beat:delta", "order": 2, "view": "DELTA",
+                "title_zh": "这次改了什么", "caption_zh": "只突出新增、移除与重组。",
+                "focus_slot_ids": all_slot_ids,
+            },
+            {
+                "beat_id": "story-beat:after", "order": 3, "view": "AFTER",
+                "title_zh": "现在怎么工作", "caption_zh": "用相同位置对照新版。",
+                "focus_slot_ids": after_slot_ids or all_slot_ids,
+            },
+            {
+                "beat_id": "story-beat:verify", "order": 4, "view": "VERIFY",
+                "title_zh": "我该验证什么", "caption_zh": "最后只执行一个可观察动作。",
+                "focus_slot_ids": verify_slot_ids,
+            },
+        ]
+        return {
+            "default_beat": "DELTA",
+            "relationship_mode": relationship_mode,
+            "slots": slots,
+            "connectors": connectors,
+            "beats": beats,
+            "verify_step_id": str(verification_mission["first_step_id"]),
+            "boundary_note_zh": (
+                "箭头只表示主场景中已有的明确关系；位置相邻不代表额外调用。"
+                if relationship_mode == "VERIFIED_FLOW"
+                else "这些卡片是回答同一问题的并列事实，不表示调用顺序。"
+            ),
         }
 
     @staticmethod
@@ -2114,9 +2267,9 @@ class HtmlChangeStoryRenderer:
         *,
         repository_root: str | os.PathLike[str] | None = None,
     ) -> str:
-        """Render the v1.7 Change Canvas with a first-action verification mission."""
+        """Render the v1.8 four-beat visual story and detailed Change Canvas."""
 
-        if story.get("schema_version") != "1.7.0" or story.get("language") != "zh-CN":
+        if story.get("schema_version") != "1.8.0" or story.get("language") != "zh-CN":
             raise ValueError("unsupported Change Story")
         esc = lambda value: html.escape(str(value), quote=True)
         body_esc = lambda value: esc(str(value).replace("PARTIAL", "当前证据边界"))
@@ -2129,6 +2282,7 @@ class HtmlChangeStoryRenderer:
         )
         canvas = story["change_canvas"]
         mission = canvas["verification_mission"]
+        visual_story = canvas["visual_story"]
         scenario_lens = story["scenario_lens"]
         scenarios = {
             str(item["scenario_id"]): item for item in scenario_lens["scenarios"]
@@ -2344,6 +2498,113 @@ class HtmlChangeStoryRenderer:
             f'<ol class="action-list">{mission_followups}</ol></details>'
             if mission_followups else ""
         )
+
+        story_slots = {
+            str(item["slot_id"]): item for item in visual_story["slots"]
+        }
+
+        def story_slot_markup(slot: Mapping[str, object], view: str) -> str:
+            change = str(slot["change"])
+            classes = f'story-slot story-{change.lower()}'
+            if view == "BEFORE":
+                absent = slot["before_item_id"] is None
+                return (
+                    f'<article class="{classes}{" story-absent" if absent else ""}">'
+                    f'<small>{int(slot["order"]):02d} · {esc(slot["area"])}</small>'
+                    f'<strong>{esc(slot["before_label_zh"])}</strong>'
+                    f'<span>{"尚未出现" if absent else "原有步骤"}</span></article>'
+                )
+            if view == "AFTER":
+                absent = slot["after_item_id"] is None
+                return (
+                    f'<article class="{classes}{" story-absent" if absent else ""}">'
+                    f'<small>{int(slot["order"]):02d} · {esc(slot["area"])}</small>'
+                    f'<strong>{esc(slot["after_label_zh"])}</strong>'
+                    f'<span>{"已经退出" if absent else "当前步骤"}</span></article>'
+                )
+            return (
+                f'<article class="{classes}"><small>{int(slot["order"]):02d} · '
+                f'{esc(_CHANGE_ZH.get(change, change))}</small>'
+                f'<span class="story-old">{esc(slot["before_label_zh"])}</span>'
+                '<b>→</b>'
+                f'<strong>{esc(slot["after_label_zh"])}</strong></article>'
+            )
+
+        def story_relations(view: str) -> str:
+            if visual_story["relationship_mode"] != "VERIFIED_FLOW":
+                return (
+                    '<div class="story-boundary"><b>≡ 并列事实</b>'
+                    f'<span>{esc(visual_story["boundary_note_zh"])}</span></div>'
+                )
+            rows = []
+            for connector in visual_story["connectors"]:
+                if view not in connector["views"]:
+                    continue
+                source = story_slots[str(connector["source_slot_id"])]
+                target = story_slots[str(connector["target_slot_id"])]
+                if view == "BEFORE":
+                    source_label = source["before_label_zh"]
+                    target_label = target["before_label_zh"]
+                elif view == "AFTER":
+                    source_label = source["after_label_zh"]
+                    target_label = target["after_label_zh"]
+                else:
+                    source_label = (
+                        source["after_label_zh"]
+                        if source["after_item_id"] is not None
+                        else source["before_label_zh"]
+                    )
+                    target_label = (
+                        target["after_label_zh"]
+                        if target["after_item_id"] is not None
+                        else target["before_label_zh"]
+                    )
+                rows.append(
+                    '<div class="story-route">'
+                    f'<span>{esc(source_label)}</span><b>'
+                    f'{esc(connector["relation_zh"])} →</b>'
+                    f'<span>{esc(target_label)}</span></div>'
+                )
+            if not rows:
+                return (
+                    '<div class="story-boundary"><b>? 暂无可画关系</b>'
+                    f'<span>{esc(visual_story["boundary_note_zh"])}</span></div>'
+                )
+            return '<div class="story-routes">' + "".join(rows) + '</div>'
+
+        beat_panels = []
+        for beat in visual_story["beats"]:
+            view = str(beat["view"])
+            focus_slots = [
+                story_slots[str(slot_id)] for slot_id in beat["focus_slot_ids"]
+                if str(slot_id) in story_slots
+            ]
+            if view == "VERIFY":
+                body = (
+                    '<section class="mission-card" aria-label="验证任务">'
+                    '<div class="mission-number">1</div><div class="mission-copy">'
+                    '<small>现在只做这一步</small>'
+                    f'<h2>{body_esc(first_mission_step["action_zh"])}</h2>'
+                    f'<p class="mission-success">成功标志：{body_esc(first_mission_step["success_zh"])}</p></div>'
+                    f'<div class="mission-meta"><b>约 {mission["estimated_minutes"]} 分钟</b>'
+                    '<span>建议验证 · 尚未执行</span></div>'
+                    f'{mission_more}</section>'
+                )
+            else:
+                slot_markup = "".join(
+                    story_slot_markup(slot, view) for slot in focus_slots
+                ) or '<p class="story-empty">当前没有进入业务聚焦层的变更节点。</p>'
+                body = (
+                    '<div class="story-slot-grid">'
+                    + slot_markup
+                    + '</div>' + story_relations(view)
+                )
+            beat_panels.append(
+                f'<section class="story-beat" data-story-beat="{view}">'
+                f'<div class="story-beat-heading"><small>第 {beat["order"]} 幕</small>'
+                f'<h2>{esc(beat["title_zh"])}</h2><p>{esc(beat["caption_zh"])}</p></div>'
+                f'{body}</section>'
+            )
         visible_impacts = list(story["impacts"])[:12]
         impacts = "".join(
             f'<li><strong>{esc(item["label"])}</strong><small>{esc(item["kind"])} · '
@@ -2397,13 +2658,28 @@ class HtmlChangeStoryRenderer:
 .mission-more{grid-column:2/4}.mission-more summary{cursor:pointer;color:var(--blue);font-size:12px;font-weight:700}.mission-more .action-list{margin-top:8px}.action-list small{display:block;margin-top:3px;color:var(--green)}
 @media(max-width:640px){.mission-card{grid-template-columns:auto 1fr}.mission-meta{grid-column:1/-1;grid-auto-flow:column;justify-items:start}.mission-more{grid-column:1/-1}}
 """
+        story_css = """
+.visual-story{margin-top:12px;padding:18px;border:1px solid var(--line);border-radius:20px;background:var(--paper);box-shadow:var(--shadow)}.story-topline{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}.story-title small{color:var(--blue);font-size:10px;font-weight:850;letter-spacing:.12em}.story-title h2{margin:2px 0;font-size:22px}.story-title p{margin:0;color:var(--muted);font-size:12px}.story-switch{display:grid;grid-template-columns:repeat(4,minmax(84px,1fr));gap:6px;padding:5px;border-radius:13px;background:#e7eae5}.story-switch label{padding:8px 11px;border:1px solid transparent;border-radius:9px;color:var(--muted);text-align:center;font-size:12px;font-weight:800;cursor:pointer}.story-switch label span{display:block;font-size:9px;letter-spacing:.08em}.story-beat{display:none;min-height:260px;padding:16px;border:1px solid #dfe3dd;border-radius:16px;background:linear-gradient(145deg,#fff,#f4f6f2)}.story-beat-heading{display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:baseline;margin-bottom:14px}.story-beat-heading small{grid-row:1/3;display:grid;place-items:center;width:54px;height:54px;border-radius:14px;background:var(--ink);color:white;font-size:10px;font-weight:850}.story-beat-heading h2{margin:0;font-size:20px}.story-beat-heading p{margin:0;color:var(--muted);font-size:12px}.story-slot-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:9px}.story-slot{display:grid;align-content:start;min-height:112px;padding:12px;border:1px solid var(--line);border-top:5px solid var(--amber);border-radius:12px;background:white}.story-slot small{color:var(--muted);font-size:9px;font-weight:750;letter-spacing:.04em}.story-slot strong{margin-top:8px;font-size:14px;line-height:1.35}.story-slot>span:last-child{margin-top:auto;color:var(--muted);font-size:10px}.story-slot.story-added{border-top-color:var(--green);background:var(--green-soft)}.story-slot.story-removed{border-top-color:var(--red);background:var(--red-soft)}.story-slot.story-absent{border-style:dashed;filter:grayscale(1);opacity:.55}.story-old{color:var(--muted);font-size:11px;text-decoration-line:line-through;text-decoration-thickness:1px}.story-slot>b{color:var(--blue);font-size:18px}.story-routes{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.story-route{display:flex;gap:7px;align-items:center;padding:7px 9px;border:1px solid #c9d4f7;border-radius:999px;background:var(--blue-soft);font-size:10px}.story-route b{color:var(--blue)}.story-boundary{display:flex;gap:10px;align-items:center;margin-top:12px;padding:10px 12px;border:1px dashed #b9c2bc;border-radius:11px;background:#fbfcfa;font-size:11px}.story-boundary b{white-space:nowrap}.story-boundary span{color:var(--muted)}.canvas-details{margin-top:12px}.canvas-details>summary{padding:14px 17px;border:1px solid var(--line);border-radius:14px;background:#f8faf7;color:var(--blue);font-weight:800;cursor:pointer}.canvas-details[open]>summary{margin-bottom:9px}.canvas-details-body{display:grid;gap:9px}
+@media(max-width:760px){.story-topline{align-items:stretch;flex-direction:column}.story-switch{grid-template-columns:repeat(2,1fr)}.story-slot-grid{grid-template-columns:1fr 1fr}}@media(max-width:480px){.visual-story{padding:12px}.story-slot-grid{grid-template-columns:1fr}.story-boundary{align-items:flex-start;flex-direction:column}}
+"""
+        story_view_css = "".join(
+            f'#story-beat-{view.lower()}:checked~.canvas-workspace '
+            f'.story-switch label[for="story-beat-{view.lower()}"]'
+            '{background:var(--ink);color:white;border-color:var(--ink)}'
+            f'#story-beat-{view.lower()}:checked~.canvas-workspace '
+            f'.story-beat[data-story-beat="{view}"]{{display:block}}'
+            f'#story-beat-{view.lower()}:focus-visible~.canvas-workspace '
+            f'.story-switch label[for="story-beat-{view.lower()}"]'
+            '{outline:3px solid var(--focus);outline-offset:2px}'
+            for view in ("BEFORE", "DELTA", "AFTER", "VERIFY")
+        )
         css = """
 :root{--bg:#f2f3f0;--paper:#fbfbf8;--ink:#18201d;--muted:#68716d;--line:#d8dcd6;--blue:#315dd8;--blue-soft:#eaf0ff;--green:#17834a;--green-soft:#e9f7ee;--red:#c13d45;--red-soft:#fff0f0;--amber:#a86308;--focus:#ef9f1a;--shadow:0 18px 55px rgba(31,45,39,.10)}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;overflow-x:hidden;background:linear-gradient(135deg,#eef0eb,#f8f8f5 55%,#edf2f0);color:var(--ink);font:15px/1.55 "Segoe UI","Microsoft YaHei",sans-serif}button,label,summary{font:inherit}.canvas-radio{position:absolute;width:1px;height:1px;opacity:.001;clip-path:inset(50%)}main{max-width:1440px;margin:auto;padding:18px 24px 40px}.canvas-header{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:end;padding:22px 26px;border:1px solid #29312e;border-radius:20px;background:#18201d;color:white;box-shadow:var(--shadow)}.eyebrow{color:#9fb7ff;font-size:11px;font-weight:800;letter-spacing:.16em}.canvas-header h1{max-width:980px;margin:5px 0 8px;font-size:clamp(24px,3vw,38px);line-height:1.18;letter-spacing:-.025em}.canvas-header p{max-width:940px;margin:0;color:#cad1ce}.capsule-route{display:grid;grid-template-columns:minmax(0,1fr) 38px minmax(0,1fr);gap:10px;align-items:center;max-width:980px;margin:12px 0}.capsule-route span{padding:10px 12px;border:1px solid #40504a;border-radius:10px;background:#222c28;color:#f3f6f4;font-weight:700}.capsule-route small{display:block;margin-bottom:2px;color:#9fb7ff;font-size:9px;letter-spacing:.1em}.capsule-route b{color:#9fb7ff;font-size:22px;text-align:center}.status-stack{display:grid;gap:8px;justify-items:end}.status-pill{padding:6px 11px;border:1px solid #82958d;border-radius:999px;color:#dce5e1;font-size:11px;font-weight:800}.delta-summary{display:flex;gap:6px}.delta-summary span{min-width:45px;padding:7px 10px;border-radius:9px;background:#27322e;text-align:center;font-weight:800}.delta-summary span:first-child{color:#76d59b}.delta-summary span:nth-child(2){color:#ff959a}.delta-summary span:last-child{color:#f1bd6c}.partial-banner{grid-column:1/-1;padding:8px 12px;border-radius:9px;background:#3b3020;color:#ffe0a9;font-size:12px}.canvas-workspace{margin-top:12px}.canvas-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;border:1px solid var(--line);border-radius:15px;background:rgba(251,251,248,.94)}.view-switch{display:flex;gap:5px;padding:4px;border-radius:11px;background:#e5e8e3}.view-switch label{min-width:92px;padding:8px 13px;border:1px solid transparent;border-radius:8px;color:var(--muted);text-align:center;font-weight:750;cursor:pointer}.view-switch label small{display:block;font-size:9px;letter-spacing:.08em}.legend{display:flex;gap:14px;color:var(--muted);font-size:12px}.legend i{display:inline-block;width:8px;height:8px;margin-right:5px;border-radius:50%}.legend .add{background:var(--green)}.legend .remove{background:var(--red)}.legend .change{background:var(--amber)}.chapter-stepper{display:flex;gap:8px;margin:9px 0;overflow:auto;scrollbar-width:thin}.chapter-step{display:flex;flex:1;min-width:155px;align-items:center;gap:9px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:#f9faf7;color:var(--muted);cursor:pointer}.chapter-step>span{display:grid;place-items:center;flex:0 0 28px;height:28px;border-radius:8px;background:#e6e9e4;font-size:10px}.chapter-step strong{font-size:13px;white-space:nowrap}.canvas-chapter{display:none}.canvas-chapter-shell{display:grid;grid-template-columns:minmax(0,2.25fr) minmax(270px,.75fr);min-height:475px;border:1px solid var(--line);border-radius:20px;background:var(--paper);box-shadow:var(--shadow);overflow:hidden}.canvas-main{min-width:0;padding:20px}.chapter-heading{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.chapter-heading span{color:var(--blue);font-size:10px;font-weight:800;letter-spacing:.09em}.chapter-heading h2{max-width:850px;margin:3px 0 14px;font-size:21px;line-height:1.35}.mini-counts{display:flex;gap:4px}.mini-counts span{padding:3px 7px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:10px}.canvas-scene{display:none;align-content:start;gap:12px;min-height:330px;padding:15px;border:1px solid #dfe3dd;border-radius:15px;background:radial-gradient(circle at 20% 0,#fff 0,transparent 42%),linear-gradient(#f5f6f2,#f0f2ed);background-size:auto,auto}.scene-column{display:grid;align-content:start;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.scene-label{grid-column:1/-1;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.11em}.delta-grid{display:grid;grid-template-columns:minmax(0,1fr) 58px minmax(0,1fr);gap:10px}.delta-divider{display:grid;place-items:center;align-content:center;color:var(--blue)}.delta-divider span{font-size:10px;font-weight:800}.delta-divider b{font-size:26px}.canvas-node{display:flex;position:relative;min-width:0;gap:10px;align-items:center;padding:13px;border:1px solid var(--line);border-left:5px solid var(--amber);border-radius:12px;background:white;box-shadow:0 5px 18px rgba(35,48,42,.06);cursor:pointer;transition:transform .16s,box-shadow .16s,opacity .16s}.canvas-node:hover{transform:translateY(-2px);box-shadow:0 9px 24px rgba(35,48,42,.12)}.canvas-scene[data-canvas-view="DELTA"] .canvas-node.role-old{background:#f6f6f3;opacity:.58}.canvas-node.change-added{border-left-color:var(--green)}.canvas-node.change-removed{border-left-color:var(--red)}.node-symbol{display:grid;place-items:center;flex:0 0 32px;height:32px;border-radius:9px;background:#eef0ec;font-weight:900}.change-added .node-symbol{color:var(--green);background:var(--green-soft)}.change-removed .node-symbol{color:var(--red);background:var(--red-soft)}.node-copy{min-width:0}.node-copy strong,.node-copy small{display:block;overflow:hidden;text-overflow:ellipsis}.node-copy small{color:var(--muted);font:10px/1.35 Consolas,monospace;white-space:nowrap}.node-change{margin-left:auto;color:var(--muted);font-size:10px}.verified-routes,.parallel-boundary{grid-column:1/-1;margin-top:2px;padding:10px;border:1px dashed #b9c2bc;border-radius:11px;background:#fbfcfa}.route-title{margin-bottom:6px;color:var(--blue);font-size:10px;font-weight:800;letter-spacing:.08em}.verified-route{display:grid;grid-template-columns:minmax(100px,1fr) minmax(95px,.65fr) minmax(100px,1fr) auto;gap:8px;align-items:center;margin-top:5px;font-size:12px}.verified-route>span{padding:6px 8px;border-radius:7px;background:white;text-align:center}.verified-route b{display:flex;gap:5px;justify-content:center;color:var(--blue)}.verified-route b small{font-weight:600}.verified-route em{color:var(--muted);font-size:9px}.parallel-boundary{display:flex;gap:10px;align-items:center}.parallel-boundary>span{display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:#ecefea;color:#69736e;font-weight:900}.parallel-boundary strong{font-size:12px}.parallel-boundary p{margin:1px 0;color:var(--muted);font-size:11px}.truth-boundary{margin:9px 2px 0;color:var(--muted);font-size:11px}.passport-rail{padding:20px;border-left:1px solid var(--line);background:#f0f2ed}.canvas-passport{display:none;position:sticky;top:14px;padding:17px;border:1px solid var(--line);border-radius:15px;background:white;box-shadow:0 8px 24px rgba(34,46,40,.07)}.empty-passport{display:block}.passport-kicker{color:var(--blue);font-size:9px;font-weight:800;letter-spacing:.08em}.canvas-passport h3{margin:7px 0;font-size:20px}.passport-tech{padding:9px;border-radius:8px;background:#f2f4f1;font:11px/1.45 Consolas,monospace;overflow-wrap:anywhere}.passport-facts{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:12px 0}.passport-facts span{padding:8px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:10px}.passport-facts b{display:block;color:var(--ink);font-size:12px}.location{display:block;margin-top:10px;color:var(--blue);font:11px/1.4 Consolas,monospace;overflow-wrap:anywhere}.canvas-passport details{margin-top:12px}.canvas-passport summary,.evidence-details summary{cursor:pointer;color:var(--blue);font-size:11px;font-weight:700}code{display:block;margin-top:7px;color:#5f6964;font:10px/1.45 Consolas,monospace;overflow-wrap:anywhere}.below-fold{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.insight-card,.evidence-details{padding:16px;border:1px solid var(--line);border-radius:15px;background:var(--paper)}.insight-card h2{margin:0 0 9px;font-size:17px}.action-list,.impact-list{display:grid;gap:7px;margin:0;padding:0;list-style:none}.action-list li{display:flex;gap:10px;align-items:flex-start;padding:8px;border-radius:9px;background:#f0f2ed}.action-list li>span{display:grid;place-items:center;flex:0 0 24px;height:24px;border-radius:7px;background:var(--ink);color:white;font-size:10px}.impact-list li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.impact-list small{color:var(--muted)}.evidence-details{grid-column:1/-1}.evidence-details>summary{font-size:14px}.evidence-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:13px}.evidence-card{padding:11px;border:1px solid var(--line);border-radius:10px;background:white}.evidence-card>span{color:var(--blue);font-size:9px;font-weight:800}.evidence-card p{font-size:12px}.technical-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.technical-grid h3{font-size:14px}.technical-grid ul{padding-left:20px}.technical-grid table{width:100%;border-collapse:collapse;font-size:11px}.technical-grid th,.technical-grid td{padding:7px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}footer{margin:22px 2px;color:var(--muted);font-size:11px}
 @media(max-width:960px){main{padding:12px}.canvas-header{grid-template-columns:1fr}.status-stack{justify-items:start}.canvas-chapter-shell{grid-template-columns:1fr}.passport-rail{border-top:1px solid var(--line);border-left:0}.canvas-passport{position:static}.delta-grid{grid-template-columns:1fr}.delta-divider{grid-template-columns:auto auto;gap:8px}.below-fold{grid-template-columns:1fr}.evidence-details{grid-column:1}.evidence-grid,.technical-grid{grid-template-columns:1fr}}
 @media(max-width:640px){.canvas-header{padding:18px}.capsule-route{grid-template-columns:1fr}.capsule-route b{transform:rotate(90deg)}.canvas-toolbar{align-items:stretch;flex-direction:column}.view-switch label{min-width:0;flex:1;padding:7px}.legend{justify-content:center}.chapter-step{flex:0 0 auto}.canvas-main{padding:13px}.chapter-heading{display:block}.mini-counts{margin-bottom:10px}.scene-column{grid-template-columns:1fr}.verified-route{grid-template-columns:1fr}.verified-route b{transform:rotate(90deg)}.node-change{display:none}.passport-rail{padding:13px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
-""" + mission_css + view_css + "".join(chapter_css) + "".join(focus_css)
+""" + mission_css + story_css + story_view_css + view_css + "".join(chapter_css) + "".join(focus_css)
 
         partial_banner = (
             f'<div class="partial-banner">{esc(canvas["partial_note_zh"])}</div>'
@@ -2418,6 +2694,10 @@ class HtmlChangeStoryRenderer:
 <input class="canvas-radio" type="radio" name="canvas-view" id="canvas-view-before">
 <input class="canvas-radio" type="radio" name="canvas-view" id="canvas-view-delta" checked>
 <input class="canvas-radio" type="radio" name="canvas-view" id="canvas-view-after">
+<input class="canvas-radio" type="radio" name="story-beat" id="story-beat-before">
+<input class="canvas-radio" type="radio" name="story-beat" id="story-beat-delta" checked>
+<input class="canvas-radio" type="radio" name="story-beat" id="story-beat-after">
+<input class="canvas-radio" type="radio" name="story-beat" id="story-beat-verify">
 {"".join(chapter_inputs)}
 <header class="canvas-header"><div><div class="eyebrow">AEH CHANGE CANVAS · 10 秒结论</div>
 <h1>{esc(capsule["verdict_zh"])}</h1><div class="capsule-route">
@@ -2427,20 +2707,24 @@ class HtmlChangeStoryRenderer:
 <div class="status-stack"><span class="status-pill">{status_label}</span><div class="delta-summary">
 <span>+{canvas["summary"]["added_items"]}</span><span>−{canvas["summary"]["removed_items"]}</span>
 <span>∆{canvas["summary"]["changed_items"]}</span></div></div>{partial_banner}</header>
-<div class="canvas-workspace"><section class="mission-card" aria-label="验证任务">
-<div class="mission-number">1</div><div class="mission-copy"><small>现在只做这一步</small>
-<h2>{body_esc(first_mission_step["action_zh"])}</h2>
-<p class="mission-success">成功标志：{body_esc(first_mission_step["success_zh"])}</p></div>
-<div class="mission-meta"><b>约 {mission["estimated_minutes"]} 分钟</b>
-<span>建议验证 · 尚未执行</span></div>{mission_more}</section>
-<section class="canvas-toolbar" aria-label="画布工具栏">
+<div class="canvas-workspace"><section class="visual-story" aria-label="修改故事板">
+<div class="story-topline"><div class="story-title"><small>VISUAL CHANGE STORY · 修改故事板</small>
+<h2>四幕看懂这次修改</h2><p>同一位置贯穿原来、变化和现在；最后只留下一个验证动作。</p></div>
+<nav class="story-switch" aria-label="故事幕切换">
+<label for="story-beat-before">原来<span>BEFORE</span></label>
+<label for="story-beat-delta">变化<span>DELTA</span></label>
+<label for="story-beat-after">现在<span>AFTER</span></label>
+<label for="story-beat-verify">验证<span>VERIFY</span></label></nav></div>
+{"".join(beat_panels)}<p class="truth-boundary">证据边界：{esc(visual_story["boundary_note_zh"])}</p>
+</section><details class="canvas-details"><summary>展开详细 Change Canvas 与代码证据</summary>
+<div class="canvas-details-body"><section class="canvas-toolbar" aria-label="画布工具栏">
 <div class="view-switch"><label for="canvas-view-before">原来<small>BEFORE</small></label>
 <label for="canvas-view-delta">变化<small>DELTA</small></label>
 <label for="canvas-view-after">现在<small>AFTER</small></label></div>
 <div class="legend"><span><i class="add"></i>新增</span><span><i class="remove"></i>移除</span>
 <span><i class="change"></i>修改</span></div></section>
 <nav class="chapter-stepper" aria-label="修改故事章节">{"".join(chapter_labels)}</nav>
-<section class="canvas-chapters">{"".join(chapter_panels)}</section>
+<section class="canvas-chapters">{"".join(chapter_panels)}</section></div></details>
 <section class="below-fold"><article class="insight-card"><h2>验证边界</h2>
 <p>{body_esc(mission["boundary_zh"])}</p><p><strong>完成条件：</strong>{body_esc(mission["completion_zh"])}</p>
 </article><article class="insight-card"><h2>影响与未知项</h2>

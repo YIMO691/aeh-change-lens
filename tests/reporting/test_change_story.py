@@ -199,7 +199,7 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertLessEqual(len(first["quick_view"]["new_flow"]), 8)
         self.assertTrue(first["quick_view"]["old_flow"])
         self.assertTrue(first["quick_view"]["new_flow"])
-        self.assertEqual("1.7.0", first["schema_version"])
+        self.assertEqual("1.8.0", first["schema_version"])
         self.assertEqual("MODIFIED", first["visual_map"]["change_shape"])
         self.assertEqual("VERIFIED_FLOW", first["visual_map"]["relationship_mode"])
         self.assertLessEqual(len(first["visual_map"]["changes"]), 3)
@@ -238,6 +238,35 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertEqual(capsule["verify_zh"], mission["steps"][0]["action_zh"])
         self.assertTrue(all(item["success_zh"] for item in mission["steps"]))
         self.assertTrue(all(item["evidence_refs"] for item in mission["steps"]))
+        visual_story = canvas["visual_story"]
+        self.assertEqual("DELTA", visual_story["default_beat"])
+        self.assertEqual(
+            ["BEFORE", "DELTA", "AFTER", "VERIFY"],
+            [item["view"] for item in visual_story["beats"]],
+        )
+        self.assertLessEqual(len(visual_story["slots"]), 7)
+        self.assertLessEqual(len(visual_story["connectors"]), 6)
+        self.assertTrue(all(item["evidence_refs"] for item in visual_story["slots"]))
+        self.assertTrue(all(item["evidence_refs"] for item in visual_story["connectors"]))
+        primary_scenario = next(
+            item for item in first["scenario_lens"]["scenarios"]
+            if item["scenario_id"] == first["scenario_lens"]["primary_scenario_id"]
+        )
+        primary_items = {
+            item["item_id"]: item
+            for item in primary_scenario["before"] + primary_scenario["after"]
+        }
+        for slot in visual_story["slots"]:
+            if slot["before_item_id"] and slot["after_item_id"]:
+                self.assertEqual(
+                    primary_items[slot["before_item_id"]]["business_label_zh"],
+                    primary_items[slot["after_item_id"]]["business_label_zh"],
+                )
+        valid_slot_ids = {item["slot_id"] for item in visual_story["slots"]}
+        self.assertTrue(all(
+            {item["source_slot_id"], item["target_slot_id"]} <= valid_slot_ids
+            for item in visual_story["connectors"]
+        ))
         self.assertLessEqual(len(canvas["chapters"]), 5)
         scenario_by_id = {
             item["scenario_id"]: item for item in first["scenario_lens"]["scenarios"]
@@ -288,6 +317,13 @@ class ChangeStoryTests(unittest.TestCase):
         self.assertIn("详细思路拆解与代码证据", rendered)
         self.assertIn("语义护照", rendered)
         self.assertIn("10 秒结论", rendered)
+        self.assertIn("修改故事板", rendered)
+        self.assertIn("四幕看懂这次修改", rendered)
+        self.assertIn('id="story-beat-before"', rendered)
+        self.assertIn('id="story-beat-delta" checked', rendered)
+        self.assertIn('id="story-beat-after"', rendered)
+        self.assertIn('id="story-beat-verify"', rendered)
+        self.assertIn("展开详细 Change Canvas 与代码证据", rendered)
         self.assertIn("现在只做这一步", rendered)
         self.assertIn("成功标志", rendered)
         self.assertIn('class="mission-card"', rendered)
@@ -313,6 +349,7 @@ class ChangeStoryTests(unittest.TestCase):
         validate("change-story.schema.json", story)
         self.assertEqual("TEST_ONLY", visual["change_shape"])
         self.assertEqual("PARALLEL_FACTS", visual["relationship_mode"])
+        self.assertEqual([], story["change_canvas"]["visual_story"]["connectors"])
         self.assertEqual(3, len(visual["changes"]))
         self.assertIn("测试保障", visual["headline_zh"])
         self.assertIn("不表示它们按显示顺序相互调用", visual["relationship_note_zh"])

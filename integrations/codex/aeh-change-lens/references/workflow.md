@@ -80,7 +80,7 @@ For quick understanding, return the four explanatory `change_capsule` fields fol
 
 When the user asks to be guided through verification, use `verification_mission.steps` as a conversational state machine. Present one step, wait for the observed result, then continue. Treat `success_zh` as the observable gate, not as a claim that the tool already ran the target project. Use the step's `evidence_refs` only to investigate a mismatch. Never mark the mission complete solely because the report was generated.
 
-When the user asks how the change works, explain the primary chapter and at most three other chapter titles. Interpret `change_shape=ADDED` or `REMOVED` as an asymmetric scene rather than inventing an empty OLD or NEW lane. Do not narrate `PARALLEL_FACTS` in display order as a call chain. Use `visual_map` only as backward-compatible secondary evidence, and use `quick_view` only for optional area and mental-model context.
+When the user asks how the change works, read `change_canvas.visual_story` first. Explain its BEFORE, DELTA, AFTER, and VERIFY beats in stable slot order, then offer the primary chapter only if more detail is needed. Exact label matches may share a slot; never infer that adjacent slots call one another. Interpret `change_shape=ADDED` or `REMOVED` as an asymmetric scene rather than inventing an empty OLD or NEW lane. Do not narrate `PARALLEL_FACTS` in display order as a call chain. Use `visual_map` only as backward-compatible secondary evidence, and use `quick_view` only for optional area and mental-model context.
 
 For a requested detailed breakdown, additionally report:
 
